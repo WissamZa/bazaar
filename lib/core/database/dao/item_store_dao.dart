@@ -23,12 +23,27 @@ class ItemStoreDao {
     return db.delete('item_store', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<int> deleteByItemId(int itemId) async {
+    final db = await _db;
+    return db.delete('item_store', where: 'item_id = ?', whereArgs: [itemId]);
+  }
+
   Future<List<ItemStore>> forItem(int itemId) async {
     final db = await _db;
     final rows = await db.query(
       'item_store',
       where: 'item_id = ?',
       whereArgs: [itemId],
+    );
+    return rows.map(ItemStore.fromDb).toList();
+  }
+
+  Future<List<ItemStore>> forStore(int storeId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'item_store',
+      where: 'store_id = ?',
+      whereArgs: [storeId],
     );
     return rows.map(ItemStore.fromDb).toList();
   }

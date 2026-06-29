@@ -5,9 +5,11 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/database/dao/item_dao.dart';
 import '../../core/database/dao/store_dao.dart';
 import '../../core/database/dao/category_dao.dart';
+import '../../core/database/dao/item_store_dao.dart';
 import '../../core/models/item.dart';
 import '../../core/models/category.dart';
 import '../../core/models/store.dart';
+import '../../core/models/item_store.dart';
 import '../../core/constants/currencies.dart';
 import '../../core/providers/locale_provider.dart';
 import '../../core/services/barcode_service.dart';
@@ -30,7 +32,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   late final TextEditingController _barcode;
   late final TextEditingController _price;
   late AppCurrency _currency;
-  Store? _selectedStore;
+  Set<Store> _selectedStores = {};
   List<Store> _stores = [];
   Category? _selectedCategory;
   List<Category> _categories = [];
@@ -42,8 +44,10 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     super.initState();
     final i = widget.item;
     _name = TextEditingController(
-        text: i?.displayName(
-            context.read<LocaleProvider>().locale?.languageCode ?? 'en',),);
+      text: i?.displayName(
+        context.read<LocaleProvider>().locale?.languageCode ?? 'en',
+      ),
+    );
     _barcode = TextEditingController(text: i?.barcode ?? '');
     _price = TextEditingController(
       text: i?.price == null ? '' : i!.price!.toStringAsFixed(2),
@@ -66,6 +70,12 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
 
   Future<void> _loadStores() async {
     _stores = await StoreDao.instance.all();
+    _selectedStores = {};
+    if (widget.item != null) {
+      final relations = await ItemStoreDao.instance.forItem(widget.item!.id!);
+      final ids = relations.map((r) => r.storeId).toSet();
+      _selectedStores = _stores.where((s) => ids.contains(s.id)).toSet();
+    }
     if (!mounted) return;
     setState(() {});
   }
@@ -119,9 +129,10 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(locale.isRtl
-                ? 'فشل البحث عن الباركود'
-                : 'Barcode lookup failed',),),
+          content: Text(
+            locale.isRtl ? 'فشل البحث عن الباركود' : 'Barcode lookup failed',
+          ),
+        ),
       );
       return;
     }
@@ -194,16 +205,19 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
-            context.read<LocaleProvider>().isRtl ? 'رابط الصورة' : 'Image URL',),
+          context.read<LocaleProvider>().isRtl ? 'رابط الصورة' : 'Image URL',
+        ),
         content: TextField(
           controller: ctrl,
           decoration: const InputDecoration(hintText: 'https://...'),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(
-                  context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel',),),
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel',
+            ),
+          ),
           FilledButton(
             onPressed: () {
               setState(() {
@@ -227,35 +241,39 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(context.read<LocaleProvider>().isRtl
-            ? 'إضافة تصنيف'
-            : 'Add Category',),
+        title: Text(
+          context.read<LocaleProvider>().isRtl ? 'إضافة تصنيف' : 'Add Category',
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: ctrl,
               decoration: InputDecoration(
-                  labelText: context.read<LocaleProvider>().isRtl
-                      ? 'الاسم (إنجليزي)'
-                      : 'Name (English)',),
+                labelText: context.read<LocaleProvider>().isRtl
+                    ? 'الاسم (إنجليزي)'
+                    : 'Name (English)',
+              ),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: arCtrl,
               decoration: InputDecoration(
-                  labelText: context.read<LocaleProvider>().isRtl
-                      ? 'الاسم (عربي)'
-                      : 'Name (Arabic)',),
+                labelText: context.read<LocaleProvider>().isRtl
+                    ? 'الاسم (عربي)'
+                    : 'Name (Arabic)',
+              ),
               textDirection: TextDirection.rtl,
             ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(
-                  context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel',),),
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel',
+            ),
+          ),
           FilledButton(
             onPressed: () {
               newCatName = ctrl.text.trim();
@@ -282,16 +300,63 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     });
   }
 
+  Future<void> _showStoreSelector() async {
+    final locale = context.read<LocaleProvider>();
+    final langCode = locale.locale?.languageCode ?? 'en';
+    final isRtl = locale.isRtl;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text(isRtl ? 'اختر المتاجر' : 'Select Stores'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: _stores
+                    .map(
+                      (s) => CheckboxListTile(
+                        value: _selectedStores.contains(s),
+                        title: Text(s.displayName(langCode)),
+                        onChanged: (v) {
+                          setState(() {
+                            if (v == true) {
+                              _selectedStores.add(s);
+                            } else {
+                              _selectedStores.remove(s);
+                            }
+                          });
+                          setDialogState(() {});
+                        },
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(isRtl ? 'حفظ' : 'Done'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _save() async {
     final name = _name.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(
-          context.read<LocaleProvider>().isRtl
-              ? 'أدخل اسم المنتج'
-              : 'Enter product name',
-        ),),
+          content: Text(
+            context.read<LocaleProvider>().isRtl
+                ? 'أدخل اسم المنتج'
+                : 'Enter product name',
+          ),
+        ),
       );
       return;
     }
@@ -299,23 +364,58 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     final now = DateTime.now();
     final existing = widget.item;
     final price = double.tryParse(_price.text.trim());
+
+    // 1. Determine if we should update an existing item based on barcode
+    int? itemId = existing?.id;
+    final barcode = _barcode.text.trim();
+    if (itemId == null && barcode.isNotEmpty) {
+      final found = await ItemDao.instance.findByBarcode(barcode);
+      if (found != null) {
+        itemId = found.id;
+      }
+    }
+
     final item = Item(
-      id: existing?.id,
-      barcode: _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),
+      id: itemId,
+      barcode: barcode.isEmpty ? null : barcode,
       nameEn: name,
       nameAr: null,
       price: price,
       currency: _currency,
       imageUrl: _imageUrl,
       categoryId: _selectedCategory?.id,
-      createdAt: existing?.createdAt ?? now,
+      createdAt: (itemId != null)
+          ? (existing?.createdAt ??
+              (await ItemDao.instance.findById(itemId) ??
+                      Item(
+                        nameEn: name,
+                        createdAt: now,
+                        updatedAt: now,
+                      ))
+                  .createdAt)
+          : now,
       updatedAt: now,
     );
-    if (existing == null) {
-      await ItemDao.instance.insert(item);
+
+    if (itemId == null) {
+      itemId = await ItemDao.instance.insert(item);
     } else {
       await ItemDao.instance.update(item);
     }
+
+    // 2. Update store relationships
+    await ItemStoreDao.instance.deleteByItemId(itemId);
+    for (final store in _selectedStores) {
+      await ItemStoreDao.instance.upsert(
+        ItemStore(
+          itemId: itemId,
+          storeId: store.id!,
+          price: price,
+          currency: _currency,
+        ),
+      );
+    }
+
     if (!mounted) return;
     setState(() => _busy = false);
     Navigator.of(context).pop();
@@ -327,9 +427,11 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     final isRtl = locale.isRtl;
     return Scaffold(
       appBar: AppBar(
-        title: Text(isRtl
-            ? (widget.item == null ? 'إضافة منتج' : 'تعديل المنتج')
-            : (widget.item == null ? 'Add Item' : 'Edit Item'),),
+        title: Text(
+          isRtl
+              ? (widget.item == null ? 'إضافة منتج' : 'تعديل المنتج')
+              : (widget.item == null ? 'Add Item' : 'Edit Item'),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -427,8 +529,11 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                         ..._categories.map(
                           (c) => DropdownMenuItem<Category?>(
                             value: c,
-                            child: Text(c.displayName(
-                                locale.locale?.languageCode ?? 'en',),),
+                            child: Text(
+                              c.displayName(
+                                locale.locale?.languageCode ?? 'en',
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -444,26 +549,20 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<Store?>(
-                initialValue: _selectedStore,
-                decoration: InputDecoration(
-                  labelText: isRtl ? 'المتجر' : 'Store',
-                  prefixIcon: const Icon(Icons.storefront_outlined),
+              ListTile(
+                title: Text(isRtl ? 'المتاجر' : 'Stores'),
+                subtitle: Text(
+                  _selectedStores.isEmpty
+                      ? (isRtl ? 'لم يتم اختيار أي متجر' : 'No stores selected')
+                      : '${_selectedStores.length} ${isRtl ? 'متاجر' : 'stores'}',
+                  style: TextStyle(fontSize: 12),
                 ),
-                items: [
-                  DropdownMenuItem<Store?>(
-                    value: null,
-                    child: Text(isRtl ? '— لا أحد —' : '— None —'),
-                  ),
-                  ..._stores.map(
-                    (s) => DropdownMenuItem<Store?>(
-                      value: s,
-                      child: Text(
-                          s.displayName(locale.locale?.languageCode ?? 'en'),),
-                    ),
-                  ),
-                ],
-                onChanged: (v) => setState(() => _selectedStore = v),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _showStoreSelector,
+                shape: RoundedRectangleBorder(
+                  side: BorderSide(color: Theme.of(context).dividerColor),
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
               const SizedBox(height: 12),
               Row(
@@ -472,10 +571,13 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                     child: TextButton.icon(
                       onPressed: _pickImage,
                       icon: Icon(
-                          _imageUrl == null ? Icons.image : Icons.check_circle,),
-                      label: Text(_imageUrl == null
-                          ? (isRtl ? 'إضافة صورة' : 'Add Image')
-                          : (isRtl ? 'تغيير الصورة' : 'Change Image'),),
+                        _imageUrl == null ? Icons.image : Icons.check_circle,
+                      ),
+                      label: Text(
+                        _imageUrl == null
+                            ? (isRtl ? 'إضافة صورة' : 'Add Image')
+                            : (isRtl ? 'تغيير الصورة' : 'Change Image'),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),

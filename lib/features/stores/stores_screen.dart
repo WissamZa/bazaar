@@ -6,6 +6,7 @@ import '../../core/models/store.dart';
 import '../../core/providers/locale_provider.dart';
 import '../../widgets/empty_state.dart';
 import 'add_edit_store_screen.dart';
+import 'store_detail_screen.dart';
 
 class StoresScreen extends StatefulWidget {
   const StoresScreen({super.key});
@@ -90,18 +91,23 @@ class _StoresScreenState extends State<StoresScreen> {
                           return await showDialog<bool>(
                                 context: context,
                                 builder: (ctx) => AlertDialog(
-                                  title: Text(locale.isRtl
-                                      ? 'تأكيد الحذف؟'
-                                      : 'Confirm delete?',),
-                                  content: Text(locale.isRtl
-                                      ? 'لا يمكن التراجع عن هذا الإجراء.'
-                                      : 'This action cannot be undone.',),
+                                  title: Text(
+                                    locale.isRtl
+                                        ? 'تأكيد الحذف؟'
+                                        : 'Confirm delete?',
+                                  ),
+                                  content: Text(
+                                    locale.isRtl
+                                        ? 'لا يمكن التراجع عن هذا الإجراء.'
+                                        : 'This action cannot be undone.',
+                                  ),
                                   actions: [
                                     TextButton(
                                       onPressed: () =>
                                           Navigator.pop(ctx, false),
                                       child: Text(
-                                          locale.isRtl ? 'إلغاء' : 'Cancel',),
+                                        locale.isRtl ? 'إلغاء' : 'Cancel',
+                                      ),
                                     ),
                                     FilledButton(
                                       onPressed: () => Navigator.pop(ctx, true),
@@ -124,16 +130,25 @@ class _StoresScreenState extends State<StoresScreen> {
                               backgroundColor: Theme.of(context)
                                   .colorScheme
                                   .primaryContainer,
-                              child: Icon(Icons.storefront,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onPrimaryContainer,),
+                              child: Icon(
+                                Icons.storefront,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onPrimaryContainer,
+                              ),
                             ),
-                            title: Text(store.displayName(
-                                locale.locale?.languageCode ?? 'en',),),
+                            title: Text(
+                              store.displayName(
+                                locale.locale?.languageCode ?? 'en',
+                              ),
+                            ),
                             subtitle: _storeSubtitle(store, locale.isRtl),
                             trailing: const Icon(Icons.chevron_right),
-                            onTap: () => _openAddEdit(store: store),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => StoreDetailScreen(store: store),
+                              ),
+                            ),
                           ),
                         ),
                       );

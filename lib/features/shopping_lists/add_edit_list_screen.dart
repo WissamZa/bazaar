@@ -49,7 +49,7 @@ class _AddEditListScreenState extends State<AddEditListScreen> {
       updatedAt: now,
     );
     if (existing == null) {
-      await ShoppingListDao.instance.insert(list);
+      await ShoppingListDao.instance.upsertByName(list);
     } else {
       await ShoppingListDao.instance.update(list);
     }
@@ -63,9 +63,11 @@ class _AddEditListScreenState extends State<AddEditListScreen> {
     final locale = context.watch<LocaleProvider>();
     return Scaffold(
       appBar: AppBar(
-        title: Text(locale.isRtl
-            ? (widget.list == null ? 'قائمة جديدة' : 'تعديل القائمة')
-            : (widget.list == null ? 'New List' : 'Edit List'),),
+        title: Text(
+          locale.isRtl
+              ? (widget.list == null ? 'قائمة جديدة' : 'تعديل القائمة')
+              : (widget.list == null ? 'New List' : 'Edit List'),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
