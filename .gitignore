@@ -18,6 +18,7 @@ ephemeral/
 # VS Code
 .vscode/
 *.zip
+*.sh
 # Xcode
 **/ios/**/*.mode1v3
 **/ios/**/*.mode2v3
