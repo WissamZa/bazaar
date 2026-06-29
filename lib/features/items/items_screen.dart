@@ -41,39 +41,44 @@ class _ItemsScreenState extends State<ItemsScreen> {
 
   Future<void> _refresh({String? query}) async {
     setState(() => _loading = true);
-    final q = query ?? _query;
-    var items = q.isEmpty
-        ? await ItemDao.instance.all()
-        : await ItemDao.instance.search(q);
+    try {
+      final q = query ?? _query;
+      var items = q.isEmpty
+          ? await ItemDao.instance.all()
+          : await ItemDao.instance.search(q);
 
-    // Apply sorting
-    items = List.from(items);
-    switch (_sortOption) {
-      case SortOption.newest:
-        items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        break;
-      case SortOption.oldest:
-        items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-        break;
-      case SortOption.priceLowHigh:
-        items.sort((a, b) => (a.price ?? 0).compareTo(b.price ?? 0));
-        break;
-      case SortOption.priceHighLow:
-        items.sort((a, b) => (b.price ?? 0).compareTo(a.price ?? 0));
-        break;
-      case SortOption.nameAZ:
-        items.sort(
-            (a, b) => a.nameEn.toLowerCase().compareTo(b.nameEn.toLowerCase()));
-        break;
-      case SortOption.nameZA:
-        items.sort(
-            (a, b) => b.nameEn.toLowerCase().compareTo(a.nameEn.toLowerCase()));
-        break;
+      // Apply sorting
+      items = List.from(items);
+      switch (_sortOption) {
+        case SortOption.newest:
+          items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          break;
+        case SortOption.oldest:
+          items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          break;
+        case SortOption.priceLowHigh:
+          items.sort((a, b) => (a.price ?? 0).compareTo(b.price ?? 0));
+          break;
+        case SortOption.priceHighLow:
+          items.sort((a, b) => (b.price ?? 0).compareTo(a.price ?? 0));
+          break;
+        case SortOption.nameAZ:
+          items.sort((a, b) =>
+              a.nameEn.toLowerCase().compareTo(b.nameEn.toLowerCase()));
+          break;
+        case SortOption.nameZA:
+          items.sort((a, b) =>
+              b.nameEn.toLowerCase().compareTo(a.nameEn.toLowerCase()));
+          break;
+      }
+
+      _items = items;
+    } catch (e) {
+      debugPrint('Error refreshing items: $e');
+    } finally {
+      if (!mounted) return;
+      setState(() => _loading = false);
     }
-
-    _items = items;
-    if (!mounted) return;
-    setState(() => _loading = false);
   }
 
   Future<void> _openScanner() async {
@@ -92,149 +97,127 @@ class _ItemsScreenState extends State<ItemsScreen> {
   @override
   Widget build(BuildContext context) {
     final locale = context.watch<LocaleProvider>();
-    return Scaffold(
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtrl,
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      hintText: locale.isRtl
-                          ? 'ابحث عن منتجات...'
-                          : 'Search items...',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _query.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                _query = '';
-                                _refresh();
-                              },
-                            ),
-                    ),
-                    onChanged: (v) {
-                      _query = v;
-                      _refresh(query: v);
-                    },
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText:
+                        locale.isRtl ? 'ابحث عن منتجات...' : 'Search items...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              _query = '';
+                              _refresh();
+                            },
+                          ),
                   ),
+                  onChanged: (v) {
+                    _query = v;
+                    _refresh(query: v);
+                  },
                 ),
-                IconButton(
-                  icon: const Icon(Icons.sort),
-                  onPressed: () => _showSortMenu(context, locale),
-                ),
-              ],
-            ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.sort),
+                onPressed: () => _showSortMenu(context, locale),
+              ),
+            ],
           ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                    ? EmptyState(
-                        icon: Icons.inventory_2_outlined,
-                        title: locale.isRtl
-                            ? 'لا توجد منتجات بعد'
-                            : 'No items yet',
-                        hint: locale.isRtl
-                            ? 'اضغط على زر + لإضافة أول منتج'
-                            : 'Tap the + button to add your first item',
-                        actionLabel: locale.isRtl ? 'إضافة منتج' : 'Add Item',
-                        onAction: () => _openAddEdit(),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _refresh,
-                        child: ListView.builder(
-                          itemCount: _items.length,
-                          itemBuilder: (_, i) {
-                            final item = _items[i];
-                            return Dismissible(
-                              key: ValueKey(item.id ?? i),
-                              direction: DismissDirection.endToStart,
-                              background: Container(
-                                color: Colors.red,
-                                alignment: Alignment.centerRight,
-                                padding: const EdgeInsets.only(right: 24),
-                                child: const Icon(Icons.delete,
-                                    color: Colors.white),
-                              ),
-                              confirmDismiss: (_) async {
-                                return await showDialog<bool>(
-                                      context: context,
-                                      builder: (ctx) => AlertDialog(
-                                        title: Text(locale.isRtl
-                                            ? 'تأكيد الحذف؟'
-                                            : 'Confirm delete?'),
-                                        content: Text(locale.isRtl
-                                            ? 'لا يمكن التراجع عن هذا الإجراء.'
-                                            : 'This action cannot be undone.'),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(ctx, false),
-                                            child: Text(locale.isRtl
-                                                ? 'إلغاء'
-                                                : 'Cancel'),
-                                          ),
-                                          FilledButton(
-                                            onPressed: () =>
-                                                Navigator.pop(ctx, true),
-                                            child: Text(locale.isRtl
-                                                ? 'حذف'
-                                                : 'Delete'),
-                                          ),
-                                        ],
-                                      ),
-                                    ) ??
-                                    false;
-                              },
-                              onDismissed: (_) async {
-                                await ItemDao.instance.delete(item.id!);
-                                _items.removeAt(i);
-                                setState(() {});
-                              },
-                              child: ListTile(
-                                title: Text(item.displayName(
-                                    locale.locale?.languageCode ?? 'en')),
-                                subtitle: item.barcode == null
-                                    ? null
-                                    : Text(
-                                        ' Barcode: ${item.barcode}',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall,
-                                      ),
-                                trailing: CurrencyDisplay(amount: item.price),
-                                onTap: () => _openAddEdit(item: item),
-                              ),
-                            );
-                          },
-                        ),
+        ),
+        Expanded(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _items.isEmpty
+                  ? EmptyState(
+                      icon: Icons.inventory_2_outlined,
+                      title:
+                          locale.isRtl ? 'لا توجد منتجات بعد' : 'No items yet',
+                      hint: locale.isRtl
+                          ? 'اضغط على زر + لإضافة أول منتج'
+                          : 'Tap the + button to add your first item',
+                      actionLabel: locale.isRtl ? 'إضافة منتج' : 'Add Item',
+                      onAction: () => _openAddEdit(),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: _refresh,
+                      child: ListView.builder(
+                        itemCount: _items.length,
+                        itemBuilder: (_, i) {
+                          final item = _items[i];
+                          return Dismissible(
+                            key: ValueKey(item.id ?? i),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              color: Colors.red,
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 24),
+                              child:
+                                  const Icon(Icons.delete, color: Colors.white),
+                            ),
+                            confirmDismiss: (_) async {
+                              return await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: Text(locale.isRtl
+                                          ? 'تأكيد الحذف؟'
+                                          : 'Confirm delete?'),
+                                      content: Text(locale.isRtl
+                                          ? 'لا يمكن التراجع عن هذا الإجراء.'
+                                          : 'This action cannot be undone.'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, false),
+                                          child: Text(locale.isRtl
+                                              ? 'إلغاء'
+                                              : 'Cancel'),
+                                        ),
+                                        FilledButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, true),
+                                          child: Text(
+                                              locale.isRtl ? 'حذف' : 'Delete'),
+                                        ),
+                                      ],
+                                    ),
+                                  ) ??
+                                  false;
+                            },
+                            onDismissed: (_) async {
+                              await ItemDao.instance.delete(item.id!);
+                              _items.removeAt(i);
+                              setState(() {});
+                            },
+                            child: ListTile(
+                              title: Text(item.displayName(
+                                  locale.locale?.languageCode ?? 'en')),
+                              subtitle: item.barcode == null
+                                  ? null
+                                  : Text(
+                                      ' Barcode: ${item.barcode}',
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall,
+                                    ),
+                              trailing: CurrencyDisplay(amount: item.price),
+                              onTap: () => _openAddEdit(item: item),
+                            ),
+                          );
+                        },
                       ),
-          ),
-        ],
-      ),
-      floatingActionButton: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          FloatingActionButton.small(
-            heroTag: 'scan_fab',
-            onPressed: _openScanner,
-            child: const Icon(Icons.qr_code_scanner),
-          ),
-          const SizedBox(width: 12),
-          FloatingActionButton(
-            heroTag: 'add_fab',
-            onPressed: () => _openAddEdit(),
-            child: const Icon(Icons.add),
-          ),
-        ],
-      ),
+                    ),
+        ),
+      ],
     );
   }
 

@@ -30,15 +30,20 @@ class _ListsScreenState extends State<ListsScreen> {
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
-    final user = context.read<UserProvider>().username ?? 'local';
-    _lists = await ShoppingListDao.instance.all(owner: user);
-    _itemCounts = {};
-    for (final l in _lists) {
-      final items = await ListItemDao.instance.forList(l.id!);
-      _itemCounts[l.id!] = items.length;
+    try {
+      final user = context.read<UserProvider>().username ?? 'local';
+      _lists = await ShoppingListDao.instance.all(owner: user);
+      _itemCounts = {};
+      for (final l in _lists) {
+        final items = await ListItemDao.instance.forList(l.id!);
+        _itemCounts[l.id!] = items.length;
+      }
+    } catch (e) {
+      debugPrint('Error refreshing lists: $e');
+    } finally {
+      if (!mounted) return;
+      setState(() => _loading = false);
     }
-    if (!mounted) return;
-    setState(() => _loading = false);
   }
 
   Future<void> _openAddEdit({ShoppingList? list}) async {
@@ -58,52 +63,52 @@ class _ListsScreenState extends State<ListsScreen> {
   @override
   Widget build(BuildContext context) {
     final locale = context.watch<LocaleProvider>();
-    return Scaffold(
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _lists.isEmpty
-              ? EmptyState(
-                  icon: Icons.checklist_outlined,
-                  title: locale.isRtl ? 'لا توجد قوائم تسوق بعد' : 'No shopping lists yet',
-                  hint: locale.isRtl
-                      ? 'أنشئ قائمة لبدء التسوق'
-                      : 'Create a list to start shopping',
-                  actionLabel: locale.isRtl ? 'قائمة جديدة' : 'New List',
-                  onAction: () => _openAddEdit(),
-                )
-              : RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: ListView.builder(
-                    itemCount: _lists.length,
-                    itemBuilder: (_, i) {
-                      final list = _lists[i];
-                      final count = _itemCounts[list.id!] ?? 0;
-                      return Card(
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                            child: Icon(
-                              Icons.checklist,
-                              color: Theme.of(context).colorScheme.onPrimaryContainer,
-                            ),
+    return _loading
+        ? const Center(child: CircularProgressIndicator())
+        : _lists.isEmpty
+            ? EmptyState(
+                icon: Icons.checklist_outlined,
+                title: locale.isRtl
+                    ? 'لا توجد قوائم تسوق بعد'
+                    : 'No shopping lists yet',
+                hint: locale.isRtl
+                    ? 'أنشئ قائمة لبدء التسوق'
+                    : 'Create a list to start shopping',
+                actionLabel: locale.isRtl ? 'قائمة جديدة' : 'New List',
+                onAction: () => _openAddEdit(),
+              )
+            : RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView.builder(
+                  itemCount: _lists.length,
+                  itemBuilder: (_, i) {
+                    final list = _lists[i];
+                    final count = _itemCounts[list.id!] ?? 0;
+                    return Card(
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primaryContainer,
+                          child: Icon(
+                            Icons.checklist,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer,
                           ),
-                          title: Text(list.displayName(locale.locale?.languageCode ?? 'en')),
-                          subtitle: Text(
-                            locale.isRtl
-                                ? '$count عنصر · ${list.owner}'
-                                : '$count items · ${list.owner}',
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _openDetail(list),
                         ),
-                      );
-                    },
-                  ),
+                        title: Text(list
+                            .displayName(locale.locale?.languageCode ?? 'en')),
+                        subtitle: Text(
+                          locale.isRtl
+                              ? '$count عنصر · ${list.owner}'
+                              : '$count items · ${list.owner}',
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => _openDetail(list),
+                      ),
+                    );
+                  },
                 ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _openAddEdit(),
-        child: const Icon(Icons.add),
-      ),
-    );
+              );
   }
 }

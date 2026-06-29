@@ -16,7 +16,7 @@ class BarcodeService {
   final ItemDao _itemDao = ItemDao.instance;
   final ScraperService _scraper = ScraperService.instance;
 
-  /// Lookup a barcode locally first, then online.
+  /// Lookup a barcode locally first, then online using the full chain.
   /// Returns a [BarcodeLookup] describing what was found.
   Future<BarcodeLookup> lookup(String code) async {
     final local = await _itemDao.findByBarcode(code);
@@ -24,6 +24,25 @@ class BarcodeService {
       return BarcodeLookup.local(local);
     }
     final online = await _scraper.searchBarcode(code);
+    return BarcodeLookup.online(code, online);
+  }
+
+  /// Lookup a barcode from a specific online [source] only. Local DB is
+  /// still consulted first so we never duplicate existing items.
+  /// Pass [skipLocal] = true to force an online-only lookup (e.g. when the
+  /// user explicitly wants to refresh prices from a specific store).
+  Future<BarcodeLookup> lookupFromSource(
+    String code,
+    LookupSource source, {
+    bool skipLocal = false,
+  }) async {
+    if (!skipLocal) {
+      final local = await _itemDao.findByBarcode(code);
+      if (local != null && source == LookupSource.auto) {
+        return BarcodeLookup.local(local);
+      }
+    }
+    final online = await _scraper.searchBarcodeFromSource(code, source);
     return BarcodeLookup.online(code, online);
   }
 }

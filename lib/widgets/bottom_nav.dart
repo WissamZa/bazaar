@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/providers/locale_provider.dart';
 
-/// Bottom navigation bar with three tabs: Items | Lists | Stores.
+/// Bottom navigation bar with four tabs: Home | Items | Lists | Stores.
 /// Labels switch automatically between EN and AR.
 class BottomNav extends StatelessWidget {
   final int currentIndex;
@@ -21,24 +21,29 @@ class BottomNav extends StatelessWidget {
     final isAr = locale.isRtl;
 
     final labels = isAr
-        ? const ['المنتجات', 'قوائم التسوق', 'المتاجر']
-        : const ['Items', 'Lists', 'Stores'];
+        ? const ['الرئيسية', 'المنتجات', 'قوائم التسوق', 'المتاجر']
+        : const ['Home', 'Items', 'Lists', 'Stores'];
 
     final items = <BottomNavigationBarItem>[
       BottomNavigationBarItem(
+        icon: const Icon(Icons.dashboard_outlined),
+        activeIcon: const Icon(Icons.dashboard),
+        label: labels[0],
+      ),
+      BottomNavigationBarItem(
         icon: const Icon(Icons.inventory_2_outlined),
         activeIcon: const Icon(Icons.inventory_2),
-        label: labels[0],
+        label: labels[1],
       ),
       BottomNavigationBarItem(
         icon: const Icon(Icons.checklist_outlined),
         activeIcon: const Icon(Icons.checklist),
-        label: labels[1],
+        label: labels[2],
       ),
       BottomNavigationBarItem(
         icon: const Icon(Icons.storefront_outlined),
         activeIcon: const Icon(Icons.storefront),
-        label: labels[2],
+        label: labels[3],
       ),
     ];
 

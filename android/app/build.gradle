@@ -14,7 +14,26 @@ if (localPropertiesFile.exists()) {
 }
 
 def flutterVersionCode = localProperties.getProperty("flutter.versionCode") ?: "1"
-def flutterVersionName = localProperties.getProperty("flutter.versionName") ?: "1.0"
+def flutterVersionName = localProperties.getProperty("flutterVersionName") ?: "1.0"
+
+// ────────────────────────────────────────────────────────────────────────────
+// Release signing configuration
+//
+// The keystore is read from `android/key.properties` (git-ignored). The file
+// is created either:
+//   - locally by the developer (run scripts/generate_keystore.sh), or
+//   - on CI by the GitHub Action (`.github/workflows/build-apk.yml`), which
+//     decodes the `ANDROID_KEYSTORE_BASE64` secret and writes key.properties
+//     from the ANDROID_SIGNING_* secrets.
+//
+// If `key.properties` is missing, the release build falls back to the debug
+// signing config so `flutter build apk` keeps working out of the box.
+// ────────────────────────────────────────────────────────────────────────────
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
 
 android {
     namespace = "com.example.bazaar"
@@ -36,9 +55,24 @@ android {
         versionName = flutterVersionName
     }
 
+    signingConfigs {
+        release {
+            if (keystoreProperties.containsKey('storeFile')) {
+                keyAlias = keystoreProperties['keyAlias']
+                keyPassword = keystoreProperties['keyPassword']
+                storeFile = file(keystoreProperties['storeFile'])
+                storePassword = keystoreProperties['storePassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.debug
+            // Sign with the release keystore when available, else fall back
+            // to the debug keystore so local builds keep working.
+            signingConfig = keystoreProperties.containsKey('storeFile')
+                ? signingConfigs.release
+                : signingConfigs.debug
             minifyEnabled false
             shrinkResources false
         }

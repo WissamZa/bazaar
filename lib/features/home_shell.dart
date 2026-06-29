@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/providers/locale_provider.dart';
+import 'home/home_screen.dart';
 import 'items/items_screen.dart';
 import 'settings/settings_screen.dart';
 import 'shopping_lists/lists_screen.dart';
@@ -10,7 +11,8 @@ import '../widgets/bottom_nav.dart';
 import '../widgets/language_toggle.dart';
 import '../widgets/theme_toggle.dart';
 
-/// Scaffold holding the three tab screens + settings entry in the app bar.
+/// Scaffold holding the four tab screens + settings entry in the app bar.
+/// Tab order: Home (analytics) | Items | Lists | Stores.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -22,6 +24,7 @@ class _HomeShellState extends State<HomeShell> {
   int _index = 0;
 
   final _screens = const [
+    HomeScreen(),
     ItemsScreen(),
     ListsScreen(),
     StoresScreen(),
@@ -31,8 +34,8 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final locale = context.watch<LocaleProvider>();
     final titles = locale.isRtl
-        ? ['المنتجات', 'قوائم التسوق', 'المتاجر']
-        : ['Items', 'Shopping Lists', 'Stores'];
+        ? ['الرئيسية', 'المنتجات', 'قوائم التسوق', 'المتاجر']
+        : ['Home', 'Items', 'Shopping Lists', 'Stores'];
 
     return Scaffold(
       appBar: AppBar(

@@ -11,6 +11,7 @@ import '../../core/models/store.dart';
 import '../../core/constants/currencies.dart';
 import '../../core/providers/locale_provider.dart';
 import '../../core/services/barcode_service.dart';
+import '../../core/services/scraper_service.dart';
 import '../scanner/scanner_screen.dart';
 import '../scanner/scan_result_screen.dart';
 
@@ -83,14 +84,41 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     final code = _barcode.text.trim();
     if (code.isEmpty) return;
 
+    // Let the user choose which source to query (default: Auto).
+    final locale = context.read<LocaleProvider>();
+    final langCode = locale.locale?.languageCode ?? 'en';
+    final LookupSource? picked = await showDialog<LookupSource>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(locale.isRtl ? 'البحث في:' : 'Look up in:'),
+        children: LookupSource.values
+            .map(
+              (s) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, s),
+                child: Row(
+                  children: [
+                    const Icon(Icons.travel_explore_outlined, size: 20),
+                    const SizedBox(width: 12),
+                    Text(s.displayName(langCode)),
+                  ],
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+    if (picked == null) return;
+
     setState(() => _busy = true);
-    final lookup = await BarcodeService.instance.lookup(code);
+    final lookup = picked == LookupSource.auto
+        ? await BarcodeService.instance.lookup(code)
+        : await BarcodeService.instance.lookupFromSource(code, picked);
     setState(() => _busy = false);
 
     if (lookup == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(context.read<LocaleProvider>().isRtl
+            content: Text(locale.isRtl
                 ? 'فشل البحث عن الباركود'
                 : 'Barcode lookup failed')),
       );
@@ -100,8 +128,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     if (lookup.foundLocal) {
       final item = lookup.localItem!;
       setState(() {
-        _name.text = item.displayName(
-            context.read<LocaleProvider>().locale?.languageCode ?? 'en');
+        _name.text = item.displayName(langCode);
         _price.text = item.price?.toStringAsFixed(2) ?? '';
         _currency = item.currency;
         _imageUrl = item.imageUrl;
@@ -115,6 +142,21 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
         _currency = CurrencyExtension.fromCode(product.currency);
         _imageUrl = product.imageUrl;
       });
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            locale.isRtl
+                ? 'لم يتم العثور على المنتج في ${picked.displayName('ar')}'
+                : 'Not found in ${picked.displayName('en')}',
+          ),
+          action: SnackBarAction(
+            label: locale.isRtl ? 'مصادر أخرى' : 'Other sources',
+            onPressed: _lookupBarcode,
+          ),
+        ),
+      );
     }
   }
 

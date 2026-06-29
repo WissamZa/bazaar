@@ -39,7 +39,7 @@ class CurrencyDisplay extends StatelessWidget {
 
     final symbol = displayCurrency == AppCurrency.sar ? '﷼' : '\$';
     final formatted = displayAmount.toStringAsFixed(2).replaceAllMapped(
-          RegExp(r'(\d)(?=(\d{3})+\.'),
+          RegExp(r'(\d)(?=(\d{3})+\.)'),
           (m) => '${m[1]},',
         );
 

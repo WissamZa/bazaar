@@ -31,6 +31,56 @@ class ScrapedProduct {
       };
 }
 
+/// Identifiers for every lookup source the app knows about.
+/// `auto` runs the full chain; the others target a single source.
+enum LookupSource {
+  auto,
+  openFoodFacts,
+  amazonSa,
+  noon,
+  panda,
+  carrefourSa,
+}
+
+extension LookupSourceX on LookupSource {
+  String get label {
+    switch (this) {
+      case LookupSource.auto:
+        return 'Auto (all sources)';
+      case LookupSource.openFoodFacts:
+        return 'Open Food Facts';
+      case LookupSource.amazonSa:
+        return 'Amazon SA';
+      case LookupSource.noon:
+        return 'Noon';
+      case LookupSource.panda:
+        return 'Panda';
+      case LookupSource.carrefourSa:
+        return 'Carrefour SA';
+    }
+  }
+
+  String get labelAr {
+    switch (this) {
+      case LookupSource.auto:
+        return 'تلقائي (كل المصادر)';
+      case LookupSource.openFoodFacts:
+        return 'أوبن فود فاكتس';
+      case LookupSource.amazonSa:
+        return 'أمازون السعودية';
+      case LookupSource.noon:
+        return 'نون';
+      case LookupSource.panda:
+        return 'بندا';
+      case LookupSource.carrefourSa:
+        return 'كارفور السعودية';
+    }
+  }
+
+  String displayName(String localeCode) =>
+      localeCode == 'ar' ? labelAr : label;
+}
+
 /// Tries multiple stores + Open Food Facts to resolve a barcode to a product
 /// name + price. All requests are wrapped in try/catch so a single failing
 /// store never breaks the chain.
@@ -50,6 +100,17 @@ class ScraperService {
     'Accept': 'text/html,application/json,application/xhtml+xml',
   };
 
+  /// All single-source scrapers keyed by their [LookupSource].
+  static final Map<LookupSource,
+          Future<ScrapedProduct?> Function(String)> _sourceScrapers = {
+    LookupSource.openFoodFacts: _tryOpenFoodFacts,
+    LookupSource.amazonSa: _tryAmazonSA,
+    LookupSource.noon: _tryNoon,
+    LookupSource.panda: _tryPanda,
+    LookupSource.carrefourSa: _tryCarrefourSA,
+  };
+
+  /// The default ordered chain used by [searchBarcode].
   final _scrapers = <Future<ScrapedProduct?> Function(String)>[
     _tryOpenFoodFacts, // first — fast JSON, gives name (no price)
     _tryAmazonSA,
@@ -90,6 +151,24 @@ class ScraperService {
       }
     }
     return base;
+  }
+
+  /// Look up a barcode using ONLY the user-selected [source].
+  /// When [source] is `auto`, falls back to the full chain via [searchBarcode].
+  Future<ScrapedProduct?> searchBarcodeFromSource(
+    String barcode,
+    LookupSource source,
+  ) async {
+    if (source == LookupSource.auto) {
+      return searchBarcode(barcode);
+    }
+    final scraper = _sourceScrapers[source];
+    if (scraper == null) return null;
+    try {
+      return await scraper(barcode);
+    } catch (_) {
+      return null;
+    }
   }
 
   // ───────────────────────── Open Food Facts ──────────────────────────
