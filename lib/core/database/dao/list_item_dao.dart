@@ -13,14 +13,21 @@ class ListItemDao {
 
   Future<int> insert(ListItem li) async {
     final db = await _db;
-    return db.insert('list_items', li.toDb(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    return db.insert(
+      'list_items',
+      li.toDb(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<int> update(ListItem li) async {
     final db = await _db;
-    return db.update('list_items', li.toDb(),
-        where: 'id = ?', whereArgs: [li.id]);
+    return db.update(
+      'list_items',
+      li.toDb(),
+      where: 'id = ?',
+      whereArgs: [li.id],
+    );
   }
 
   Future<int> delete(int id) async {

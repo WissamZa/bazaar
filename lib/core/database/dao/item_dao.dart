@@ -11,8 +11,11 @@ class ItemDao {
 
   Future<int> insert(Item item) async {
     final db = await _db;
-    return db.insert('items', item.toDb(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    return db.insert(
+      'items',
+      item.toDb(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<int> upsertByBarcode(Item item) async {

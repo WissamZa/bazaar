@@ -11,8 +11,11 @@ class ItemStoreDao {
 
   Future<int> upsert(ItemStore is_) async {
     final db = await _db;
-    return db.insert('item_store', is_.toDb(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    return db.insert(
+      'item_store',
+      is_.toDb(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<int> delete(int id) async {

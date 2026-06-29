@@ -26,8 +26,9 @@ class LocaleProvider extends ChangeNotifier {
   }
 
   Future<void> toggle() async {
-    final next =
-        (_locale?.languageCode ?? 'en') == 'en' ? const Locale('ar') : const Locale('en');
+    final next = (_locale?.languageCode ?? 'en') == 'en'
+        ? const Locale('ar')
+        : const Locale('en');
     await set(next);
   }
 

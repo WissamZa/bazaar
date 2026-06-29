@@ -141,7 +141,8 @@ class DatabaseHelper {
         )
       ''');
       await db.execute(
-          'ALTER TABLE items ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL;');
+        'ALTER TABLE items ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL;',
+      );
     }
     if (oldV < 4) {
       await db.execute('ALTER TABLE stores ADD COLUMN image_url TEXT;');

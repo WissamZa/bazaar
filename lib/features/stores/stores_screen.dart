@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../core/database/dao/store_dao.dart';
 import '../../core/models/store.dart';
 import '../../core/providers/locale_provider.dart';
-import '../../core/services/share_service.dart';
 import '../../widgets/empty_state.dart';
 import 'add_edit_store_screen.dart';
 
@@ -37,11 +36,6 @@ class _StoresScreenState extends State<StoresScreen> {
       MaterialPageRoute(builder: (_) => AddEditStoreScreen(store: store)),
     );
     _refresh();
-  }
-
-  Future<void> _shareAll() async {
-    if (_stores.isEmpty) return;
-    await ShareService.instance.exportStores(_stores);
   }
 
   /// Show address (preferred) or website as the subtitle. If both are empty
@@ -98,20 +92,21 @@ class _StoresScreenState extends State<StoresScreen> {
                                 builder: (ctx) => AlertDialog(
                                   title: Text(locale.isRtl
                                       ? 'تأكيد الحذف؟'
-                                      : 'Confirm delete?'),
+                                      : 'Confirm delete?',),
                                   content: Text(locale.isRtl
                                       ? 'لا يمكن التراجع عن هذا الإجراء.'
-                                      : 'This action cannot be undone.'),
+                                      : 'This action cannot be undone.',),
                                   actions: [
                                     TextButton(
                                       onPressed: () =>
                                           Navigator.pop(ctx, false),
-                                      child: Text(locale.isRtl ? 'إلغاء' : 'Cancel'),
+                                      child: Text(
+                                          locale.isRtl ? 'إلغاء' : 'Cancel',),
                                     ),
                                     FilledButton(
-                                      onPressed: () =>
-                                          Navigator.pop(ctx, true),
-                                      child: Text(locale.isRtl ? 'حذف' : 'Delete'),
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      child:
+                                          Text(locale.isRtl ? 'حذف' : 'Delete'),
                                     ),
                                   ],
                                 ),
@@ -126,15 +121,16 @@ class _StoresScreenState extends State<StoresScreen> {
                         child: Card(
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor:
-                                  Theme.of(context).colorScheme.primaryContainer,
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .primaryContainer,
                               child: Icon(Icons.storefront,
                                   color: Theme.of(context)
                                       .colorScheme
-                                      .onPrimaryContainer),
+                                      .onPrimaryContainer,),
                             ),
                             title: Text(store.displayName(
-                                locale.locale?.languageCode ?? 'en')),
+                                locale.locale?.languageCode ?? 'en',),),
                             subtitle: _storeSubtitle(store, locale.isRtl),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => _openAddEdit(store: store),

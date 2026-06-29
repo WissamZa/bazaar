@@ -34,7 +34,9 @@ class BackupService {
     await _exportTableToJson('items', '${backupDir.path}/items.json');
     await _exportTableToJson('stores', '${backupDir.path}/stores.json');
     await _exportTableToJson(
-        'shopping_lists', '${backupDir.path}/lists.json');
+      'shopping_lists',
+      '${backupDir.path}/lists.json',
+    );
     await _exportTableToJson('list_items', '${backupDir.path}/list_items.json');
     await _exportTableToJson('item_store', '${backupDir.path}/item_store.json');
 
@@ -43,8 +45,7 @@ class BackupService {
       'version': 1,
       'created_at': DateTime.now().toIso8601String(),
     };
-    await File('${backupDir.path}/meta.json')
-        .writeAsString(jsonEncode(meta));
+    await File('${backupDir.path}/meta.json').writeAsString(jsonEncode(meta));
 
     final archive = Archive();
     for (final f in backupDir.listSync(recursive: true).whereType<File>()) {
@@ -58,8 +59,7 @@ class BackupService {
       );
     }
 
-    final zipPath =
-        '${appDir.path}/bazaar_backup_${_timestamp()}.zip';
+    final zipPath = '${appDir.path}/bazaar_backup_${_timestamp()}.zip';
     final zipFile = File(zipPath);
     final encoded = ZipEncoder().encode(archive);
     if (encoded == null) {
@@ -148,7 +148,7 @@ class BackupService {
           id: null,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
-        ));
+        ),);
         // Re-attach list_items that referenced this list's old id
         if (contents.listItems != null) {
           final oldId = list.id;
@@ -159,7 +159,7 @@ class BackupService {
                 await ListItemDao.instance.insert(li.copyWith(
                   id: null,
                   listId: newId,
-                ));
+                ),);
               } catch (_) {
                 // skip duplicates
               }

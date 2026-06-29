@@ -7,8 +7,6 @@ import '../../core/providers/locale_provider.dart';
 import '../../widgets/currency_display.dart';
 import '../../widgets/empty_state.dart';
 import 'add_edit_item_screen.dart';
-import '../scanner/scanner_screen.dart';
-import '../scanner/scan_result_screen.dart';
 
 enum SortOption {
   newest,
@@ -64,11 +62,11 @@ class _ItemsScreenState extends State<ItemsScreen> {
           break;
         case SortOption.nameAZ:
           items.sort((a, b) =>
-              a.nameEn.toLowerCase().compareTo(b.nameEn.toLowerCase()));
+              a.nameEn.toLowerCase().compareTo(b.nameEn.toLowerCase()),);
           break;
         case SortOption.nameZA:
           items.sort((a, b) =>
-              b.nameEn.toLowerCase().compareTo(a.nameEn.toLowerCase()));
+              b.nameEn.toLowerCase().compareTo(a.nameEn.toLowerCase()),);
           break;
       }
 
@@ -76,22 +74,10 @@ class _ItemsScreenState extends State<ItemsScreen> {
     } catch (e) {
       debugPrint('Error refreshing items: $e');
     } finally {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
-  }
-
-  Future<void> _openScanner() async {
-    final code = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => const ScannerScreen()),
-    );
-    if (code == null) return;
-    // Push the lookup flow — it handles local-DB hit, online scrape, and
-    // prefilling the Add/Edit form.
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ScanResultScreen(code: code)),
-    );
-    await _refresh();
   }
 
   @override
@@ -171,23 +157,23 @@ class _ItemsScreenState extends State<ItemsScreen> {
                                     builder: (ctx) => AlertDialog(
                                       title: Text(locale.isRtl
                                           ? 'تأكيد الحذف؟'
-                                          : 'Confirm delete?'),
+                                          : 'Confirm delete?',),
                                       content: Text(locale.isRtl
                                           ? 'لا يمكن التراجع عن هذا الإجراء.'
-                                          : 'This action cannot be undone.'),
+                                          : 'This action cannot be undone.',),
                                       actions: [
                                         TextButton(
                                           onPressed: () =>
                                               Navigator.pop(ctx, false),
                                           child: Text(locale.isRtl
                                               ? 'إلغاء'
-                                              : 'Cancel'),
+                                              : 'Cancel',),
                                         ),
                                         FilledButton(
                                           onPressed: () =>
                                               Navigator.pop(ctx, true),
                                           child: Text(
-                                              locale.isRtl ? 'حذف' : 'Delete'),
+                                              locale.isRtl ? 'حذف' : 'Delete',),
                                         ),
                                       ],
                                     ),
@@ -201,7 +187,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
                             },
                             child: ListTile(
                               title: Text(item.displayName(
-                                  locale.locale?.languageCode ?? 'en')),
+                                  locale.locale?.languageCode ?? 'en',),),
                               subtitle: item.barcode == null
                                   ? null
                                   : Text(

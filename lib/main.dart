@@ -1,6 +1,6 @@
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -16,8 +16,7 @@ Future<void> main() async {
 
   // sqflite only ships a native factory for Android/iOS. On desktop (Linux,
   // Windows, macOS) we must install the FFI factory before any DB call.
-  if (!kIsWeb &&
-      (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
+  if (!kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }

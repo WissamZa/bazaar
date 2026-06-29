@@ -124,12 +124,12 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
                 ),
                 const SizedBox(height: 4),
                 DropdownButtonFormField<LookupSource>(
-                  value: _source,
-                  decoration: InputDecoration(
+                  initialValue: _source,
+                  decoration: const InputDecoration(
                     isDense: true,
-                    prefixIcon: const Icon(Icons.travel_explore_outlined),
+                    prefixIcon: Icon(Icons.travel_explore_outlined),
                     contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   ),
                   items: LookupSource.values
                       .map(
@@ -149,9 +149,8 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
           const Divider(height: 1),
           // ── Result body ────────────────────────────────────────────
           Expanded(
-            child: _loading
-                ? _buildLoading(isRtl)
-                : _buildResult(isRtl, langCode),
+            child:
+                _loading ? _buildLoading(isRtl) : _buildResult(isRtl, langCode),
           ),
         ],
       ),
@@ -165,9 +164,7 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
         children: [
           const CircularProgressIndicator(),
           const SizedBox(height: 16),
-          Text(isRtl
-              ? 'جاري البحث عن الباركود...'
-              : 'Looking up barcode...'),
+          Text(isRtl ? 'جاري البحث عن الباركود...' : 'Looking up barcode...'),
           const SizedBox(height: 8),
           Text(
             widget.code,
@@ -185,9 +182,8 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
           const SizedBox(height: 24),
           TextButton(
             onPressed: _openManualForm,
-            child: Text(isRtl
-                ? 'إلغاء والإدخال يدوياً'
-                : 'Cancel and fill manually'),
+            child: Text(
+                isRtl ? 'إلغاء والإدخال يدوياً' : 'Cancel and fill manually',),
           ),
         ],
       ),
@@ -211,10 +207,10 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.check_circle,
-                  size: 64, color: Theme.of(context).colorScheme.primary),
+                  size: 64, color: Theme.of(context).colorScheme.primary,),
               const SizedBox(height: 16),
               Text(isRtl ? 'وُجد في منتجاتك' : 'Found in your items',
-                  style: Theme.of(context).textTheme.titleMedium),
+                  style: Theme.of(context).textTheme.titleMedium,),
               const SizedBox(height: 24),
               Card(
                 child: ListTile(
@@ -222,7 +218,7 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
                   subtitle: Text(item.barcode ?? ''),
                   trailing: Text(item.price == null
                       ? '—'
-                      : item.currency.format(item.price!)),
+                      : item.currency.format(item.price!),),
                 ),
               ),
               const SizedBox(height: 24),
@@ -246,10 +242,10 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.cloud_done,
-                  size: 64, color: Theme.of(context).colorScheme.primary),
+                  size: 64, color: Theme.of(context).colorScheme.primary,),
               const SizedBox(height: 16),
               Text(isRtl ? 'تم العثور على المنتج' : 'Item found',
-                  style: Theme.of(context).textTheme.titleMedium),
+                  style: Theme.of(context).textTheme.titleMedium,),
               const SizedBox(height: 8),
               Text(
                 isRtl
@@ -265,12 +261,12 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(product.name,
-                          style: Theme.of(context).textTheme.titleMedium),
+                          style: Theme.of(context).textTheme.titleMedium,),
                       if (product.nameAr != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
                           child: Text(product.nameAr!,
-                              textDirection: TextDirection.rtl),
+                              textDirection: TextDirection.rtl,),
                         ),
                       const SizedBox(height: 8),
                       Text(
@@ -308,7 +304,7 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.search_off,
-                size: 64, color: Theme.of(context).colorScheme.error),
+                size: 64, color: Theme.of(context).colorScheme.error,),
             const SizedBox(height: 16),
             Text(
               isRtl

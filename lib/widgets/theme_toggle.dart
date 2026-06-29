@@ -15,7 +15,9 @@ class ThemeToggle extends StatelessWidget {
       child: IconButton(
         onPressed: () => themeProv.toggle(),
         icon: Icon(
-          themeProv.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+          themeProv.isDark
+              ? Icons.light_mode_outlined
+              : Icons.dark_mode_outlined,
         ),
       ),
     );

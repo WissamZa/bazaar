@@ -65,7 +65,7 @@ void main() {
       );
       expect(ShoppingList.fromJson(list.toJson()).owner, 'sara');
 
-      final li = ListItem(
+      const li = ListItem(
         id: 1,
         listId: 3,
         itemId: 7,
