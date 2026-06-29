@@ -60,7 +60,13 @@ android {
             if (keystoreProperties.containsKey('storeFile')) {
                 keyAlias = keystoreProperties['keyAlias']
                 keyPassword = keystoreProperties['keyPassword']
-                storeFile = file("${rootProject.projectDir}/app/${keystoreProperties['storeFile']}")
+                def ksFile = keystoreProperties['storeFile'] as String
+                if (ksFile.contains('android/app/')) {
+                    ksFile = ksFile.substring(ksFile.indexOf('bazaar-release.jks'))
+                } else if (ksFile.contains('/')) {
+                    ksFile = ksFile.substring(ksFile.lastIndexOf('/') + 1)
+                }
+                storeFile = file(ksFile)
                 storePassword = keystoreProperties['storePassword']
             }
         }
