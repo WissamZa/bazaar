@@ -57,16 +57,19 @@ class _AddEditStoreScreenState extends State<AddEditStoreScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
-            context.read<LocaleProvider>().isRtl ? 'رابط الصورة' : 'Image URL',),
+          context.read<LocaleProvider>().isRtl ? 'رابط الصورة' : 'Image URL',
+        ),
         content: TextField(
           controller: ctrl,
           decoration: const InputDecoration(hintText: 'https://...'),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(
-                  context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel',),),
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel',
+            ),
+          ),
           FilledButton(
             onPressed: () {
               setState(() {
@@ -88,11 +91,12 @@ class _AddEditStoreScreenState extends State<AddEditStoreScreen> {
     if (en.isEmpty && ar.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(
-          context.read<LocaleProvider>().isRtl
-              ? 'أدخل اسماً واحداً على الأقل (إنجليزي أو عربي)'
-              : 'Enter at least one name (English or Arabic)',
-        ),),
+          content: Text(
+            context.read<LocaleProvider>().isRtl
+                ? 'أدخل اسماً واحداً على الأقل (إنجليزي أو عربي)'
+                : 'Enter at least one name (English or Arabic)',
+          ),
+        ),
       );
       return;
     }
@@ -108,7 +112,7 @@ class _AddEditStoreScreenState extends State<AddEditStoreScreen> {
       createdAt: existing?.createdAt ?? DateTime.now(),
     );
     if (existing == null) {
-      await StoreDao.instance.insert(store);
+      await StoreDao.instance.upsertByName(store);
     } else {
       await StoreDao.instance.update(store);
     }
@@ -123,9 +127,11 @@ class _AddEditStoreScreenState extends State<AddEditStoreScreen> {
     final isRtl = locale.isRtl;
     return Scaffold(
       appBar: AppBar(
-        title: Text(isRtl
-            ? (widget.store == null ? 'متجر جديد' : 'تعديل المتجر')
-            : (widget.store == null ? 'New Store' : 'Edit Store'),),
+        title: Text(
+          isRtl
+              ? (widget.store == null ? 'متجر جديد' : 'تعديل المتجر')
+              : (widget.store == null ? 'New Store' : 'Edit Store'),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -164,10 +170,13 @@ class _AddEditStoreScreenState extends State<AddEditStoreScreen> {
                     child: TextButton.icon(
                       onPressed: _pickImage,
                       icon: Icon(
-                          _imageUrl == null ? Icons.image : Icons.check_circle,),
-                      label: Text(_imageUrl == null
-                          ? (isRtl ? 'إضافة صورة' : 'Add Image')
-                          : (isRtl ? 'تغيير الصورة' : 'Change Image'),),
+                        _imageUrl == null ? Icons.image : Icons.check_circle,
+                      ),
+                      label: Text(
+                        _imageUrl == null
+                            ? (isRtl ? 'إضافة صورة' : 'Add Image')
+                            : (isRtl ? 'تغيير الصورة' : 'Change Image'),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),

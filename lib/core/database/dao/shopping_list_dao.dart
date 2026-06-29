@@ -14,6 +14,26 @@ class ShoppingListDao {
     return db.insert('shopping_lists', list.toDb());
   }
 
+  Future<int> upsertByName(ShoppingList list) async {
+    final db = await _db;
+    final rows = await db.query(
+      'shopping_lists',
+      where: 'name = ? AND owner = ?',
+      whereArgs: [list.name, list.owner],
+      limit: 1,
+    );
+    if (rows.isNotEmpty) {
+      final existing = ShoppingList.fromDb(rows.first);
+      return db.update(
+        'shopping_lists',
+        list.copyWith(id: existing.id, createdAt: existing.createdAt).toDb(),
+        where: 'id = ?',
+        whereArgs: [existing.id],
+      );
+    }
+    return insert(list);
+  }
+
   Future<int> update(ShoppingList list) async {
     final db = await _db;
     return db.update(
