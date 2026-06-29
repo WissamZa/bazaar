@@ -1,0 +1,32 @@
+import 'package:sqflite/sqflite.dart';
+
+import '../database_helper.dart';
+import '../../models/item_store.dart';
+
+class ItemStoreDao {
+  ItemStoreDao._();
+  static final ItemStoreDao instance = ItemStoreDao._();
+
+  Future<Database> get _db => DatabaseHelper.instance.database;
+
+  Future<int> upsert(ItemStore is_) async {
+    final db = await _db;
+    return db.insert('item_store', is_.toDb(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<int> delete(int id) async {
+    final db = await _db;
+    return db.delete('item_store', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<ItemStore>> forItem(int itemId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'item_store',
+      where: 'item_id = ?',
+      whereArgs: [itemId],
+    );
+    return rows.map(ItemStore.fromDb).toList();
+  }
+}

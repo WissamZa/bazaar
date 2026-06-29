@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Shopping basket glyph (white on deep-green background) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,42 L74,42 L70,74 L38,74 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,42 L48,28 L52,32 L46,42 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M68,42 L60,28 L56,32 L62,42 Z" />
+    <path
+        android:fillColor="#1B5E20"
+        android:pathData="M44,52 L48,68 M56,52 L56,68 M64,52 L60,68"
+        android:strokeColor="#1B5E20"
+        android:strokeWidth="2" />
+</vector>
