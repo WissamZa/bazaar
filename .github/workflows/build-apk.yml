@@ -65,8 +65,8 @@ jobs:
             exit 0
           fi
           mkdir -p android/app
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/bazaar-release.jks
-          echo "Keystore decoded: $(ls -la android/app/bazaar-release.jks)"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > bazaar-release.jks
+          echo "Keystore decoded: $(ls -la bazaar-release.jks)"
           echo "has_keystore=true" >> "$GITHUB_OUTPUT"
 
       - name: Write key.properties (if secrets present)
