@@ -37,7 +37,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
       builder: (ctx) => AlertDialog(
         title: Text(context.read<LocaleProvider>().isRtl
             ? (category == null ? 'إضافة تصنيف' : 'تعديل تصنيف')
-            : (category == null ? 'Add Category' : 'Edit Category')),
+            : (category == null ? 'Add Category' : 'Edit Category'),),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -46,7 +46,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
               decoration: InputDecoration(
                   labelText: context.read<LocaleProvider>().isRtl
                       ? 'الاسم (إنجليزي)'
-                      : 'Name (English)'),
+                      : 'Name (English)',),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -54,7 +54,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
               decoration: InputDecoration(
                   labelText: context.read<LocaleProvider>().isRtl
                       ? 'الاسم (عربي)'
-                      : 'Name (Arabic)'),
+                      : 'Name (Arabic)',),
               textDirection: TextDirection.rtl,
             ),
           ],
@@ -63,7 +63,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: Text(
-                  context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel')),
+                  context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel',),),
           FilledButton(
             onPressed: () async {
               final name = ctrl.text.trim();
@@ -75,14 +75,14 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
                   name: name,
                   nameAr: nameAr.isEmpty ? null : nameAr,
                   createdAt: DateTime.now(),
-                ));
+                ),);
               } else {
                 await CategoryDao.instance.update(category.copyWith(
                   name: name,
                   nameAr: nameAr.isEmpty ? null : nameAr,
-                ));
+                ),);
               }
-              Navigator.pop(ctx);
+              if (ctx.mounted) Navigator.pop(ctx);
               _refresh();
             },
             child: Text(context.read<LocaleProvider>().isRtl ? 'حفظ' : 'Save'),
@@ -111,7 +111,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
                     final cat = _categories[i];
                     return ListTile(
                       title: Text(
-                          cat.displayName(locale.locale?.languageCode ?? 'en')),
+                          cat.displayName(locale.locale?.languageCode ?? 'en'),),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [

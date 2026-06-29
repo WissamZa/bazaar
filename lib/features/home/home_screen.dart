@@ -67,9 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 80),
                         EmptyState(
                           icon: Icons.analytics_outlined,
-                          title: isRtl
-                              ? 'لا توجد بيانات بعد'
-                              : 'No data yet',
+                          title: isRtl ? 'لا توجد بيانات بعد' : 'No data yet',
                           hint: isRtl
                               ? 'أضف منتجات وقوائم ومتاجر لرؤية التحليلات'
                               : 'Add items, lists and stores to see analytics',
@@ -116,9 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (_data!.storeItemCounts.isEmpty)
                           _EmptyHint(
                             isRtl: isRtl,
-                            text: isRtl
-                                ? 'لا توجد متاجر بعد'
-                                : 'No stores yet',
+                            text: isRtl ? 'لا توجد متاجر بعد' : 'No stores yet',
                           )
                         else
                           ..._data!.storeItemCounts.entries.map(
@@ -141,9 +137,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         if (_data!.mostExpensive.isEmpty)
                           _EmptyHint(
                             isRtl: isRtl,
-                            text: isRtl
-                                ? 'لا توجد أسعار بعد'
-                                : 'No prices yet',
+                            text: isRtl ? 'لا توجد أسعار بعد' : 'No prices yet',
                           )
                         else
                           ..._data!.mostExpensive.asMap().entries.map(
@@ -185,8 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _push(Widget screen) {
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => screen));
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 }
 
@@ -221,8 +214,7 @@ class _Analytics {
     required this.priceComparison,
   });
 
-  bool get isEmpty =>
-      totalLists == 0 && totalItems == 0 && totalStores == 0;
+  bool get isEmpty => totalLists == 0 && totalItems == 0 && totalStores == 0;
 
   static Future<_Analytics> load() async {
     final lists = await ShoppingListDao.instance.all();
@@ -261,7 +253,8 @@ class _Analytics {
       }
     }
 
-    final maxStoreCount = storeItemCounts.values.fold<int>(0, (a, b) => a > b ? a : b);
+    final maxStoreCount =
+        storeItemCounts.values.fold<int>(0, (a, b) => a > b ? a : b);
 
     // Most expensive items (by stored price).
     final withPrice = items.where((i) => i.price != null).toList()
@@ -340,7 +333,7 @@ class _GreetingCard extends StatelessWidget {
               radius: 24,
               backgroundColor: Theme.of(context).colorScheme.primaryContainer,
               child: Icon(Icons.shopping_basket_rounded,
-                  color: Theme.of(context).colorScheme.primary),
+                  color: Theme.of(context).colorScheme.primary,),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -348,9 +341,7 @@ class _GreetingCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    isRtl
-                        ? 'أهلاً $username'
-                        : 'Hello, $username',
+                    isRtl ? 'أهلاً $username' : 'Hello, $username',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -514,7 +505,7 @@ class _ListTileCard extends StatelessWidget {
         leading: CircleAvatar(
           backgroundColor: Theme.of(context).colorScheme.primaryContainer,
           child: Icon(Icons.checklist,
-              color: Theme.of(context).colorScheme.primary),
+              color: Theme.of(context).colorScheme.primary,),
         ),
         title: Text(list.displayName(langCode)),
         subtitle: Text(
@@ -570,7 +561,7 @@ class _StoreBarRow extends StatelessWidget {
                 value: share.clamp(0.0, 1.0),
                 minHeight: 12,
                 backgroundColor:
-                    Theme.of(context).dividerColor.withOpacity(0.3),
+                    Theme.of(context).dividerColor.withValues(alpha: 0.3),
               ),
             ),
           ),
@@ -614,7 +605,7 @@ class _ItemRankRow extends StatelessWidget {
                 ? Colors.grey
                 : rank == 3
                     ? Colors.brown
-                    : Theme.of(context).dividerColor.withOpacity(0.5),
+                    : Theme.of(context).dividerColor.withValues(alpha: 0.5),
         child: Text(
           '$rank',
           style: TextStyle(
@@ -665,14 +656,13 @@ class _PriceCompareRow extends StatelessWidget {
             Text(itemName,
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.bold,
-                    )),
+                    ),),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: prices.map((p) {
-                final isCheapest =
-                    cheapest != null && p.$2 == cheapest;
+                final isCheapest = cheapest != null && p.$2 == cheapest;
                 return Chip(
                   avatar: Icon(
                     isCheapest ? Icons.price_check : Icons.store,
@@ -689,9 +679,8 @@ class _PriceCompareRow extends StatelessWidget {
                           isCheapest ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
-                  backgroundColor: isCheapest
-                      ? Colors.green.withOpacity(0.1)
-                      : null,
+                  backgroundColor:
+                      isCheapest ? Colors.green.withValues(alpha: 0.1) : null,
                 );
               }).toList(),
             ),

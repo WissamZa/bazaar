@@ -42,7 +42,7 @@ class _HomeShellState extends State<HomeShell> {
         title: Row(
           children: [
             Icon(Icons.shopping_basket_rounded,
-                color: Theme.of(context).colorScheme.primary),
+                color: Theme.of(context).colorScheme.primary,),
             const SizedBox(width: 8),
             Text(titles[_index]),
           ],

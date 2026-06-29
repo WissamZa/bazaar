@@ -41,8 +41,9 @@ class _ListsScreenState extends State<ListsScreen> {
     } catch (e) {
       debugPrint('Error refreshing lists: $e');
     } finally {
-      if (!mounted) return;
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -97,7 +98,7 @@ class _ListsScreenState extends State<ListsScreen> {
                           ),
                         ),
                         title: Text(list
-                            .displayName(locale.locale?.languageCode ?? 'en')),
+                            .displayName(locale.locale?.languageCode ?? 'en'),),
                         subtitle: Text(
                           locale.isRtl
                               ? '$count عنصر · ${list.owner}'

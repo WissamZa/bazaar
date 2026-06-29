@@ -133,7 +133,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         height: 200,
                         decoration: BoxDecoration(
                           border: Border.all(
-                              color: Colors.white.withOpacity(0.7), width: 2),
+                              color: Colors.white.withValues(alpha: 0.7),
+                              width: 2,),
                           borderRadius: BorderRadius.circular(16),
                         ),
                       ),
@@ -145,7 +146,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                       child: Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 8),
+                              horizontal: 16, vertical: 8,),
                           decoration: BoxDecoration(
                             color: Colors.black54,
                             borderRadius: BorderRadius.circular(20),
@@ -166,7 +167,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
 class _PermissionDenied extends StatelessWidget {
   final VoidCallback onRetry;
   final VoidCallback onOpenSettings;
-  const _PermissionDenied({required this.onRetry, required this.onOpenSettings});
+  const _PermissionDenied(
+      {required this.onRetry, required this.onOpenSettings,});
 
   @override
   Widget build(BuildContext context) {

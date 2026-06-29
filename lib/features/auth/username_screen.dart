@@ -80,7 +80,7 @@ class _UsernameScreenState extends State<UsernameScreen> {
                   Text('Username',
                       style: theme.textTheme.labelMedium?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
-                      )),
+                      ),),
                   const SizedBox(height: 8),
                   TextFormField(
                     controller: _controller,

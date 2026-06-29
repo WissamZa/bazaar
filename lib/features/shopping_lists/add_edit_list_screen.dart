@@ -65,7 +65,7 @@ class _AddEditListScreenState extends State<AddEditListScreen> {
       appBar: AppBar(
         title: Text(locale.isRtl
             ? (widget.list == null ? 'قائمة جديدة' : 'تعديل القائمة')
-            : (widget.list == null ? 'New List' : 'Edit List')),
+            : (widget.list == null ? 'New List' : 'Edit List'),),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

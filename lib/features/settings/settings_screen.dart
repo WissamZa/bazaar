@@ -32,7 +32,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         title: Text(context.read<LocaleProvider>().isRtl
             ? 'تغيير اسم المستخدم'
-            : 'Change username'),
+            : 'Change username',),
         content: TextField(
           controller: ctrl,
           autofocus: true,
@@ -40,7 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel'),),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             child: const Text('Save'),
@@ -150,7 +150,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final zip = await BackupService.instance.createBackup();
       if (!mounted) return;
       await Share.shareXFiles([XFile(zip.path)],
-          text: 'Bazaar backup ${DateTime.now().toIso8601String()}');
+          text: 'Bazaar backup ${DateTime.now().toIso8601String()}',);
     } catch (e) {
       if (!mounted) return;
       _snack('Backup failed: $e');
@@ -167,6 +167,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() => _busy = false);
         return;
       }
+      if (!mounted) return;
       final locale = context.read<LocaleProvider>();
       final isRtl = locale.isRtl;
       final restoreItems = ValueNotifier<bool>(true);
@@ -188,7 +189,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     builder: (_, v, __) => CheckboxListTile(
                       value: v,
                       title: Text(
-                          '${isRtl ? "منتجات" : "Items"} (${contents.itemsCount})'),
+                          '${isRtl ? "منتجات" : "Items"} (${contents.itemsCount})',),
                       onChanged: (b) {
                         restoreItems.value = b ?? false;
                         setS(() {});
@@ -200,7 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     builder: (_, v, __) => CheckboxListTile(
                       value: v,
                       title: Text(
-                          '${isRtl ? "متاجر" : "Stores"} (${contents.storesCount})'),
+                          '${isRtl ? "متاجر" : "Stores"} (${contents.storesCount})',),
                       onChanged: (b) {
                         restoreStores.value = b ?? false;
                         setS(() {});
@@ -212,7 +213,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     builder: (_, v, __) => CheckboxListTile(
                       value: v,
                       title: Text(
-                          '${isRtl ? "قوائم" : "Lists"} (${contents.listsCount})'),
+                          '${isRtl ? "قوائم" : "Lists"} (${contents.listsCount})',),
                       onChanged: (b) {
                         restoreLists.value = b ?? false;
                         setS(() {});
@@ -226,10 +227,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: Text(isRtl ? 'إلغاء' : 'Cancel')),
+                child: Text(isRtl ? 'إلغاء' : 'Cancel'),),
             FilledButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                child: Text(isRtl ? 'استعادة' : 'Restore')),
+                child: Text(isRtl ? 'استعادة' : 'Restore'),),
           ],
         ),
       );
@@ -246,7 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       _snack(isRtl
           ? 'اكتملت الاستعادة: ${summary.items} منتج، ${summary.stores} متجر، ${summary.lists} قائمة'
-          : 'Restore complete: ${summary.items} items, ${summary.stores} stores, ${summary.lists} lists');
+          : 'Restore complete: ${summary.items} items, ${summary.stores} stores, ${summary.lists} lists',);
     } catch (e) {
       if (!mounted) return;
       _snack('Restore failed: $e');
@@ -267,7 +268,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final locale = context.read<LocaleProvider>();
       _snack(locale.isRtl
           ? 'اكتمل الاستيراد: ${summary.count} عنصر (${summary.type})'
-          : 'Import complete: ${summary.count} (${summary.type})');
+          : 'Import complete: ${summary.count} (${summary.type})',);
     } catch (e) {
       if (!mounted) return;
       _snack('Import failed: $e');
@@ -316,7 +317,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: () async {
               await Navigator.of(context).push(
                 MaterialPageRoute(
-                    builder: (_) => const CategorySettingsScreen()),
+                    builder: (_) => const CategorySettingsScreen(),),
               );
             },
           ),
@@ -340,7 +341,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text(isRtl ? 'السمة' : 'Theme'),
             subtitle: Text(themeProv.isDark
                 ? (isRtl ? 'داكن' : 'Dark')
-                : (isRtl ? 'فاتح' : 'Light')),
+                : (isRtl ? 'فاتح' : 'Light'),),
             onTap: _pickTheme,
           ),
           ListTile(
@@ -348,7 +349,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text(isRtl ? 'العملة' : 'Currency'),
             subtitle: Text(currencyProv.currency == AppCurrency.sar
                 ? 'Saudi Riyal (﷼)'
-                : 'US Dollar (\$)'),
+                : 'US Dollar (\$)',),
             onTap: _pickCurrency,
           ),
           const Divider(),
@@ -358,12 +359,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ? const SizedBox(
                     width: 22,
                     height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                    child: CircularProgressIndicator(strokeWidth: 2),)
                 : const Icon(Icons.backup_outlined),
             title: Text(isRtl ? 'نسخ احتياطي' : 'Backup'),
             subtitle: Text(isRtl
                 ? 'أنشئ ملف zip وشاركه'
-                : 'Create a zip file and share it'),
+                : 'Create a zip file and share it',),
             onTap: _busy ? null : _backup,
           ),
           ListTile(
@@ -371,12 +372,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ? const SizedBox(
                     width: 22,
                     height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                    child: CircularProgressIndicator(strokeWidth: 2),)
                 : const Icon(Icons.restore),
             title: Text(isRtl ? 'استعادة' : 'Restore'),
             subtitle: Text(isRtl
                 ? 'اختر ملف zip للاستعادة'
-                : 'Pick a zip file to restore from'),
+                : 'Pick a zip file to restore from',),
             onTap: _busy ? null : _restore,
           ),
           ListTile(
@@ -384,12 +385,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ? const SizedBox(
                     width: 22,
                     height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                    child: CircularProgressIndicator(strokeWidth: 2),)
                 : const Icon(Icons.download),
             title: Text(isRtl ? 'استيراد JSON' : 'Import JSON'),
             subtitle: Text(isRtl
                 ? 'استيراد منتجات/قوائم/متاجر'
-                : 'Import items / lists / stores'),
+                : 'Import items / lists / stores',),
             onTap: _busy ? null : _import,
           ),
           ListTile(
@@ -413,10 +414,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Icons.code),
             title: Text(isRtl
                 ? 'بازار — تطبيق محلي بالكامل'
-                : 'Bazaar — fully local app'),
+                : 'Bazaar — fully local app',),
             subtitle: Text(isRtl
                 ? 'لا خادم، لا حساب، خصوصية كاملة'
-                : 'No server, no account, full privacy'),
+                : 'No server, no account, full privacy',),
           ),
         ],
       ),

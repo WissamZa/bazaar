@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
 
 import '../database/dao/item_dao.dart';
 import '../models/item.dart';

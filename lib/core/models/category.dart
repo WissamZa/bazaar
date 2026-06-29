@@ -1,5 +1,3 @@
-import 'package:intl/intl.dart';
-
 class Category {
   final int? id;
   final String name;

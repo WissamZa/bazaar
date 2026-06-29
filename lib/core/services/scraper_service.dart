@@ -77,8 +77,7 @@ extension LookupSourceX on LookupSource {
     }
   }
 
-  String displayName(String localeCode) =>
-      localeCode == 'ar' ? labelAr : label;
+  String displayName(String localeCode) => localeCode == 'ar' ? labelAr : label;
 }
 
 /// Tries multiple stores + Open Food Facts to resolve a barcode to a product
@@ -101,8 +100,8 @@ class ScraperService {
   };
 
   /// All single-source scrapers keyed by their [LookupSource].
-  static final Map<LookupSource,
-          Future<ScrapedProduct?> Function(String)> _sourceScrapers = {
+  static final Map<LookupSource, Future<ScrapedProduct?> Function(String)>
+      _sourceScrapers = {
     LookupSource.openFoodFacts: _tryOpenFoodFacts,
     LookupSource.amazonSa: _tryAmazonSA,
     LookupSource.noon: _tryNoon,
@@ -209,7 +208,7 @@ class ScraperService {
     final doc = parse(html);
 
     final nameEl = doc.querySelector(
-            'div.s-result-item h2 a span, span.a-size-medium.a-color-base') ??
+            'div.s-result-item h2 a span, span.a-size-medium.a-color-base',) ??
         doc.querySelectorAll('h2 a span').firstOrNull;
     final priceWhole =
         doc.querySelector('span.a-price-whole')?.text.trim() ?? '';
@@ -243,8 +242,7 @@ class ScraperService {
         doc.querySelector('.price');
 
     if (nameEl == null) return null;
-    final priceStr =
-        (priceEl?.text ?? '').replaceAll(RegExp(r'[^0-9.]'), '');
+    final priceStr = (priceEl?.text ?? '').replaceAll(RegExp(r'[^0-9.]'), '');
     return ScrapedProduct(
       name: nameEl.text.trim(),
       price: double.tryParse(priceStr),
@@ -263,8 +261,7 @@ class ScraperService {
     final nameEl = doc.querySelector('.product-name, .product-title');
     final priceEl = doc.querySelector('.price, .product-price');
     if (nameEl == null) return null;
-    final priceStr =
-        (priceEl?.text ?? '').replaceAll(RegExp(r'[^0-9.]'), '');
+    final priceStr = (priceEl?.text ?? '').replaceAll(RegExp(r'[^0-9.]'), '');
     return ScrapedProduct(
       name: nameEl.text.trim(),
       price: double.tryParse(priceStr),
@@ -284,8 +281,7 @@ class ScraperService {
     final priceEl =
         doc.querySelector('.product-price, .cmp-product-card__price');
     if (nameEl == null) return null;
-    final priceStr =
-        (priceEl?.text ?? '').replaceAll(RegExp(r'[^0-9.]'), '');
+    final priceStr = (priceEl?.text ?? '').replaceAll(RegExp(r'[^0-9.]'), '');
     return ScrapedProduct(
       name: nameEl.text.trim(),
       price: double.tryParse(priceStr),
@@ -297,9 +293,8 @@ class ScraperService {
   // ───────────────────────── Shared helpers ───────────────────────────
   static Future<String?> _fetchHtml(String url) async {
     try {
-      final res = await http
-          .get(Uri.parse(url), headers: _headers)
-          .timeout(_timeout);
+      final res =
+          await http.get(Uri.parse(url), headers: _headers).timeout(_timeout);
       if (res.statusCode == 200) return res.body;
     } catch (_) {
       return null;

@@ -10,8 +10,11 @@ class CategoryDao {
 
   Future<int> insert(Category category) async {
     final db = await _db;
-    return db.insert('categories', category.toDb(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    return db.insert(
+      'categories',
+      category.toDb(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<int> update(Category category) async {

@@ -43,7 +43,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     final i = widget.item;
     _name = TextEditingController(
         text: i?.displayName(
-            context.read<LocaleProvider>().locale?.languageCode ?? 'en'));
+            context.read<LocaleProvider>().locale?.languageCode ?? 'en',),);
     _barcode = TextEditingController(text: i?.barcode ?? '');
     _price = TextEditingController(
       text: i?.price == null ? '' : i!.price!.toStringAsFixed(2),
@@ -115,12 +115,13 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
         : await BarcodeService.instance.lookupFromSource(code, picked);
     setState(() => _busy = false);
 
-    if (lookup == null) {
+    if (!lookup.found) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text(locale.isRtl
                 ? 'فشل البحث عن الباركود'
-                : 'Barcode lookup failed')),
+                : 'Barcode lookup failed',),),
       );
       return;
     }
@@ -165,6 +166,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       MaterialPageRoute(builder: (_) => const ScannerScreen()),
     );
     if (code == null) return;
+    if (!mounted) return;
     // If user accepts a result, refresh fields with whatever they saved.
     final saved = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => ScanResultScreen(code: code)),
@@ -192,16 +194,16 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
-            context.read<LocaleProvider>().isRtl ? 'رابط الصورة' : 'Image URL'),
+            context.read<LocaleProvider>().isRtl ? 'رابط الصورة' : 'Image URL',),
         content: TextField(
           controller: ctrl,
-          decoration: InputDecoration(hintText: 'https://...'),
+          decoration: const InputDecoration(hintText: 'https://...'),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: Text(
-                  context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel')),
+                  context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel',),),
           FilledButton(
             onPressed: () {
               setState(() {
@@ -227,7 +229,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       builder: (ctx) => AlertDialog(
         title: Text(context.read<LocaleProvider>().isRtl
             ? 'إضافة تصنيف'
-            : 'Add Category'),
+            : 'Add Category',),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -236,7 +238,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
               decoration: InputDecoration(
                   labelText: context.read<LocaleProvider>().isRtl
                       ? 'الاسم (إنجليزي)'
-                      : 'Name (English)'),
+                      : 'Name (English)',),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -244,7 +246,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
               decoration: InputDecoration(
                   labelText: context.read<LocaleProvider>().isRtl
                       ? 'الاسم (عربي)'
-                      : 'Name (Arabic)'),
+                      : 'Name (Arabic)',),
               textDirection: TextDirection.rtl,
             ),
           ],
@@ -253,7 +255,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: Text(
-                  context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel')),
+                  context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel',),),
           FilledButton(
             onPressed: () {
               newCatName = ctrl.text.trim();
@@ -289,7 +291,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
           context.read<LocaleProvider>().isRtl
               ? 'أدخل اسم المنتج'
               : 'Enter product name',
-        )),
+        ),),
       );
       return;
     }
@@ -327,7 +329,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       appBar: AppBar(
         title: Text(isRtl
             ? (widget.item == null ? 'إضافة منتج' : 'تعديل المنتج')
-            : (widget.item == null ? 'Add Item' : 'Edit Item')),
+            : (widget.item == null ? 'Add Item' : 'Edit Item'),),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -412,7 +414,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<Category?>(
-                      value: _selectedCategory,
+                      initialValue: _selectedCategory,
                       decoration: InputDecoration(
                         labelText: isRtl ? 'التصنيف' : 'Category',
                         prefixIcon: const Icon(Icons.category_outlined),
@@ -426,7 +428,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                           (c) => DropdownMenuItem<Category?>(
                             value: c,
                             child: Text(c.displayName(
-                                locale.locale?.languageCode ?? 'en')),
+                                locale.locale?.languageCode ?? 'en',),),
                           ),
                         ),
                       ],
@@ -443,7 +445,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<Store?>(
-                value: _selectedStore,
+                initialValue: _selectedStore,
                 decoration: InputDecoration(
                   labelText: isRtl ? 'المتجر' : 'Store',
                   prefixIcon: const Icon(Icons.storefront_outlined),
@@ -457,7 +459,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                     (s) => DropdownMenuItem<Store?>(
                       value: s,
                       child: Text(
-                          s.displayName(locale.locale?.languageCode ?? 'en')),
+                          s.displayName(locale.locale?.languageCode ?? 'en'),),
                     ),
                   ),
                 ],
@@ -470,10 +472,10 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                     child: TextButton.icon(
                       onPressed: _pickImage,
                       icon: Icon(
-                          _imageUrl == null ? Icons.image : Icons.check_circle),
+                          _imageUrl == null ? Icons.image : Icons.check_circle,),
                       label: Text(_imageUrl == null
                           ? (isRtl ? 'إضافة صورة' : 'Add Image')
-                          : (isRtl ? 'تغيير الصورة' : 'Change Image')),
+                          : (isRtl ? 'تغيير الصورة' : 'Change Image'),),
                     ),
                   ),
                   const SizedBox(width: 8),

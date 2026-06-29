@@ -36,8 +36,12 @@ class StoreDao {
 
   Future<int> update(Store store) async {
     final db = await _db;
-    return db.update('stores', store.toDb(),
-        where: 'id = ?', whereArgs: [store.id]);
+    return db.update(
+      'stores',
+      store.toDb(),
+      where: 'id = ?',
+      whereArgs: [store.id],
+    );
   }
 
   Future<int> delete(int id) async {
