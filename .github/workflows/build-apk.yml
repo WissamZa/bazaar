@@ -17,10 +17,10 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
-    tags: [ 'v*' ]
+    branches: [main, master]
+    tags: ["v*"]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -65,15 +65,15 @@ jobs:
             exit 0
           fi
           mkdir -p android/app
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > bazaar-release.jks
-          echo "Keystore decoded: $(ls -la bazaar-release.jks)"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/bazaar-release.jks
+          echo "Keystore decoded: $(ls -la android/app/bazaar-release.jks)"
           echo "has_keystore=true" >> "$GITHUB_OUTPUT"
 
       - name: Write key.properties (if secrets present)
         env:
           ANDROID_KEY_STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
-          ANDROID_KEY_PASSWORD:       ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ANDROID_KEY_ALIAS:          ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           if [ "${{ steps.keystore.outputs.has_keystore }}" != "true" ]; then
             exit 0
