@@ -36,10 +36,7 @@ class ScrapedProduct {
 enum LookupSource {
   auto,
   openFoodFacts,
-  amazonSa,
-  noon,
-  panda,
-  carrefourSa,
+  searxng,
 }
 
 extension LookupSourceX on LookupSource {
@@ -49,14 +46,8 @@ extension LookupSourceX on LookupSource {
         return 'Auto (all sources)';
       case LookupSource.openFoodFacts:
         return 'Open Food Facts';
-      case LookupSource.amazonSa:
-        return 'Amazon SA';
-      case LookupSource.noon:
-        return 'Noon';
-      case LookupSource.panda:
-        return 'Panda';
-      case LookupSource.carrefourSa:
-        return 'Carrefour SA';
+      case LookupSource.searxng:
+        return 'SearXNG';
     }
   }
 
@@ -66,14 +57,8 @@ extension LookupSourceX on LookupSource {
         return 'تلقائي (كل المصادر)';
       case LookupSource.openFoodFacts:
         return 'أوبن فود فاكتس';
-      case LookupSource.amazonSa:
-        return 'أمازون السعودية';
-      case LookupSource.noon:
-        return 'نون';
-      case LookupSource.panda:
-        return 'بندا';
-      case LookupSource.carrefourSa:
-        return 'كارفور السعودية';
+      case LookupSource.searxng:
+        return 'سيركس إن جي';
     }
   }
 
@@ -103,19 +88,13 @@ class ScraperService {
   static final Map<LookupSource, Future<ScrapedProduct?> Function(String)>
       _sourceScrapers = {
     LookupSource.openFoodFacts: _tryOpenFoodFacts,
-    LookupSource.amazonSa: _tryAmazonSA,
-    LookupSource.noon: _tryNoon,
-    LookupSource.panda: _tryPanda,
-    LookupSource.carrefourSa: _tryCarrefourSA,
+    LookupSource.searxng: _trySearXNG,
   };
 
   /// The default ordered chain used by [searchBarcode].
   final _scrapers = <Future<ScrapedProduct?> Function(String)>[
     _tryOpenFoodFacts, // first — fast JSON, gives name (no price)
-    _tryAmazonSA,
-    _tryNoon,
-    _tryPanda,
-    _tryCarrefourSA,
+    _trySearXNG,
   ];
 
   /// Run scrapers in order, return the first non-null result. If only Open
@@ -201,94 +180,42 @@ class ScraperService {
     );
   }
 
-  // ───────────────────────── Amazon SA ────────────────────────────────
-  static Future<ScrapedProduct?> _tryAmazonSA(String barcode) async {
-    final html = await _fetchHtml('https://www.amazon.sa/s?k=$barcode');
-    if (html == null) return null;
-    final doc = parse(html);
-
-    final nameEl = doc.querySelector(
-            'div.s-result-item h2 a span, span.a-size-medium.a-color-base',) ??
-        doc.querySelectorAll('h2 a span').firstOrNull;
-    final priceWhole =
-        doc.querySelector('span.a-price-whole')?.text.trim() ?? '';
-    final priceFrac =
-        doc.querySelector('span.a-price-fraction')?.text.trim() ?? '';
-    final priceStr = '$priceWhole$priceFrac'.replaceAll(RegExp(r'[^0-9.]'), '');
-
-    final name = nameEl?.text.trim() ?? '';
-    if (name.isEmpty) return null;
-    return ScrapedProduct(
-      name: name,
-      price: double.tryParse(priceStr),
-      currency: 'SAR',
-      source: 'Amazon SA',
+  // ───────────────────────── SearXNG ────────────────────────────────────
+  static Future<ScrapedProduct?> _trySearXNG(String barcode) async {
+    final url = Uri.parse(
+      'https://cachyos-nitro.tail3d23b7.ts.net:8080/search?q=$barcode&format=json',
     );
+    try {
+      final res = await http.get(url, headers: _headers).timeout(_timeout);
+      if (res.statusCode != 200) return null;
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      final results = json['results'] as List?;
+      if (results == null || results.isEmpty) return null;
+
+      final first = results.first as Map<String, dynamic>;
+      final title = first['title'] as String? ?? '';
+      if (title.isEmpty) return null;
+
+      return ScrapedProduct(
+        name: title,
+        price: null, // SearXNG usually doesn't provide a clean price in JSON
+        currency: 'SAR',
+        source: 'SearXNG',
+        imageUrl: first['img_src'] as String?,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   // ───────────────────────── Noon ─────────────────────────────────────
-  /// Noon is a JS-heavy SPA — the static HTML rarely contains the product
-  /// card. We still attempt it because some crawlers cache a SSR fallback.
-  static Future<ScrapedProduct?> _tryNoon(String barcode) async {
-    final html = await _fetchHtml(
-      'https://www.noon.com/saudi-en/search/?q=$barcode',
-    );
-    if (html == null) return null;
-    final doc = parse(html);
-
-    final nameEl = doc.querySelector('[data-qa="product-name"]') ??
-        doc.querySelector('.productContainer .name');
-    final priceEl = doc.querySelector('[data-qa="product-price"]') ??
-        doc.querySelector('.price');
-
-    if (nameEl == null) return null;
-    final priceStr = (priceEl?.text ?? '').replaceAll(RegExp(r'[^0-9.]'), '');
-    return ScrapedProduct(
-      name: nameEl.text.trim(),
-      price: double.tryParse(priceStr),
-      currency: 'SAR',
-      source: 'Noon',
-    );
-  }
+  // Removed as per user request.
 
   // ───────────────────────── Panda ────────────────────────────────────
-  static Future<ScrapedProduct?> _tryPanda(String barcode) async {
-    final html = await _fetchHtml(
-      'https://www.pandamart.com/search?query=$barcode',
-    );
-    if (html == null) return null;
-    final doc = parse(html);
-    final nameEl = doc.querySelector('.product-name, .product-title');
-    final priceEl = doc.querySelector('.price, .product-price');
-    if (nameEl == null) return null;
-    final priceStr = (priceEl?.text ?? '').replaceAll(RegExp(r'[^0-9.]'), '');
-    return ScrapedProduct(
-      name: nameEl.text.trim(),
-      price: double.tryParse(priceStr),
-      currency: 'SAR',
-      source: 'Panda',
-    );
-  }
+  // Removed as per user request.
 
   // ───────────────────────── Carrefour SA ─────────────────────────────
-  static Future<ScrapedProduct?> _tryCarrefourSA(String barcode) async {
-    final html = await _fetchHtml(
-      'https://www.carrefourksa.com/mafsau/en/search?keyword=$barcode',
-    );
-    if (html == null) return null;
-    final doc = parse(html);
-    final nameEl = doc.querySelector('.product-title, .cmp-product-card__name');
-    final priceEl =
-        doc.querySelector('.product-price, .cmp-product-card__price');
-    if (nameEl == null) return null;
-    final priceStr = (priceEl?.text ?? '').replaceAll(RegExp(r'[^0-9.]'), '');
-    return ScrapedProduct(
-      name: nameEl.text.trim(),
-      price: double.tryParse(priceStr),
-      currency: 'SAR',
-      source: 'Carrefour',
-    );
-  }
+  // Removed as per user request.
 
   // ───────────────────────── Shared helpers ───────────────────────────
   static Future<String?> _fetchHtml(String url) async {

@@ -1,5 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 
+import 'package:sqflite/sqflite.dart';
+
 import '../../models/shopping_list.dart';
 import '../database_helper.dart';
 

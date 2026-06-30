@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/providers/locale_provider.dart';
 import 'scan_result_screen.dart';
