@@ -418,44 +418,49 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     final totalAll = _computeTotal();
     final totalChecked = _computeTotal(checkedOnly: true);
 
-    return _loading
-        ? const Center(child: CircularProgressIndicator())
-        : _rows.isEmpty
-            ? EmptyState(
-                icon: Icons.shopping_cart,
-                title: isRtl ? 'القائمة فارغة' : 'List is empty',
-                hint: isRtl
-                    ? 'أضف منتجات لبدء التسوق'
-                    : 'Add items to start shopping',
-                actionLabel: isRtl ? 'أضف منتجاً' : 'Add item',
-                onAction: _addItem,
-              )
-            : Column(
-                children: [
-                  _SummaryBar(
-                    totalItems: _rows.length,
-                    checkedItems: _checkedCount,
-                    totalAll: totalAll,
-                    totalChecked: totalChecked,
-                    isRtl: isRtl,
-                  ),
-                  const Divider(height: 1),
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 96),
-                      itemCount: _rows.length,
-                      itemBuilder: (_, i) =>
-                          _buildRow(_rows[i], isRtl, langCode),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.list.displayName(langCode)),
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _rows.isEmpty
+              ? EmptyState(
+                  icon: Icons.shopping_cart,
+                  title: isRtl ? 'القائمة فارغة' : 'List is empty',
+                  hint: isRtl
+                      ? 'أضف منتجات لبدء التسوق'
+                      : 'Add items to start shopping',
+                  actionLabel: isRtl ? 'أضف منتجاً' : 'Add item',
+                  onAction: _addItem,
+                )
+              : Column(
+                  children: [
+                    _SummaryBar(
+                      totalItems: _rows.length,
+                      checkedItems: _checkedCount,
+                      totalAll: totalAll,
+                      totalChecked: totalChecked,
+                      isRtl: isRtl,
                     ),
-                  ),
-                  _TotalBar(
-                    totalAll: totalAll,
-                    totalChecked: totalChecked,
-                    itemCount: _rows.length,
-                    isRtl: isRtl,
-                  ),
-                ],
-              );
+                    const Divider(height: 1),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 96),
+                        itemCount: _rows.length,
+                        itemBuilder: (_, i) =>
+                            _buildRow(_rows[i], isRtl, langCode),
+                      ),
+                    ),
+                    _TotalBar(
+                      totalAll: totalAll,
+                      totalChecked: totalChecked,
+                      itemCount: _rows.length,
+                      isRtl: isRtl,
+                    ),
+                  ],
+                ),
+    );
   }
 
   Widget _buildRow(RowData data, bool isRtl, String langCode) {
