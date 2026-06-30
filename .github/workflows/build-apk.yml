@@ -90,37 +90,48 @@ jobs:
           echo "Wrote android/key.properties (alias=$ALIAS)"
 
       - name: Build APK
-        run: flutter build apk --release --no-tree-shake-icons
+        run: flutter build apk --split-per-abi --release --no-tree-shake-icons
 
-      - name: Locate APK
-        id: apk
+      - name: Locate and Rename APKs
+        id: apks
         run: |
-          APK_PATH=$(find build/app/outputs/flutter-apk -name '*.apk' | head -1)
-          echo "APK path: $APK_PATH"
-          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
-          # Rename to include short SHA + signing mode for clarity.
+          mkdir -p release_apks
           SHORT_SHA=${GITHUB_SHA::7}
           if [ "${{ steps.keystore.outputs.has_keystore }}" = "true" ]; then
             SUFFIX="signed"
           else
             SUFFIX="debug-signed"
           fi
-          cp "$APK_PATH" "bazaar-${SHORT_SHA}-${SUFFIX}.apk"
-          echo "name=bazaar-${SHORT_SHA}-${SUFFIX}.apk" >> "$GITHUB_OUTPUT"
 
-      - name: Upload APK artifact
+          # Find all split APKs
+          find build/app/outputs/flutter-apk -name 'app-*-release.apk' | while read apk; do
+            FILENAME=$(basename "$apk")
+            # Example: app-arm64-v8a-release.apk -> bazaar-arm64-v8a-f1a2b3c-signed.apk
+            ABI=$(echo "$FILENAME" | cut -d'-' -f2)
+            cp "$apk" "release_apks/bazaar-${ABI}-${SHORT_SHA}-${SUFFIX}.apk"
+          done
+
+          # Also find the fat APK if it exists
+          FAT_APK=$(find build/app/outputs/flutter-apk -name 'app-release.apk' | head -1)
+          if [ -n "$FAT_APK" ]; then
+            cp "$FAT_APK" "release_apks/bazaar-universal-${SHORT_SHA}-${SUFFIX}.apk"
+          fi
+
+          echo "apks_path=release_apks/*.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: bazaar-apk
-          path: ${{ steps.apk.outputs.name }}
+          name: bazaar-apks
+          path: release_apks/*.apk
           if-no-files-found: error
           retention-days: 30
 
-      - name: Attach APK to release (on tag push)
+      - name: Attach APKs to release (on tag push)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.apk.outputs.name }}
+          files: release_apks/*.apk
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
