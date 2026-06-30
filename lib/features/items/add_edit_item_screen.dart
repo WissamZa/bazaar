@@ -16,6 +16,8 @@ import '../../core/services/barcode_service.dart';
 import '../../core/services/scraper_service.dart';
 import '../scanner/scanner_screen.dart';
 import '../scanner/scan_result_screen.dart';
+import 'widgets/category_selector.dart';
+import 'widgets/store_price_selector.dart';
 
 /// Add or edit an [Item]. When [item] is null we are creating a new one.
 class AddEditItemScreen extends StatefulWidget {
@@ -30,7 +32,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _barcode;
-  late final TextEditingController _price;
+  final Map<int, TextEditingController> _storePriceControllers = {};
   late AppCurrency _currency;
   Set<Store> _selectedStores = {};
   List<Store> _stores = [];
@@ -49,12 +51,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       ),
     );
     _barcode = TextEditingController(text: i?.barcode ?? '');
-    _price = TextEditingController(
-      text: i?.price == null ? '' : i!.price!.toStringAsFixed(2),
-    );
     _currency = i?.currency ?? AppCurrency.sar;
-    _selectedCategory =
-        i?.categoryId != null ? null : null; // Need to load first
     _imageUrl = i?.imageUrl;
     _loadStores();
     _loadCategories();
@@ -64,17 +61,27 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   void dispose() {
     _name.dispose();
     _barcode.dispose();
-    _price.dispose();
+    for (var ctrl in _storePriceControllers.values) {
+      ctrl.dispose();
+    }
     super.dispose();
   }
 
   Future<void> _loadStores() async {
     _stores = await StoreDao.instance.all();
     _selectedStores = {};
+    _storePriceControllers.clear();
+
     if (widget.item != null) {
       final relations = await ItemStoreDao.instance.forItem(widget.item!.id!);
       final ids = relations.map((r) => r.storeId).toSet();
       _selectedStores = _stores.where((s) => ids.contains(s.id)).toSet();
+
+      for (final rel in relations) {
+        _storePriceControllers[rel.storeId] = TextEditingController(
+          text: rel.price?.toStringAsFixed(2) ?? '',
+        );
+      }
     }
     if (!mounted) return;
     setState(() {});
@@ -141,7 +148,6 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       final item = lookup.localItem!;
       setState(() {
         _name.text = item.displayName(langCode);
-        _price.text = item.price?.toStringAsFixed(2) ?? '';
         _currency = item.currency;
         _imageUrl = item.imageUrl;
         _selectedCategory = null; // We'd need to load it if we want
@@ -150,7 +156,6 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       final product = lookup.onlineProduct!;
       setState(() {
         _name.text = product.name;
-        _price.text = product.price?.toStringAsFixed(2) ?? '';
         _currency = CurrencyExtension.fromCode(product.currency);
         _imageUrl = product.imageUrl;
       });
@@ -300,52 +305,6 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     });
   }
 
-  Future<void> _showStoreSelector() async {
-    final locale = context.read<LocaleProvider>();
-    final langCode = locale.locale?.languageCode ?? 'en';
-    final isRtl = locale.isRtl;
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: Text(isRtl ? 'اختر المتاجر' : 'Select Stores'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: _stores
-                    .map(
-                      (s) => CheckboxListTile(
-                        value: _selectedStores.contains(s),
-                        title: Text(s.displayName(langCode)),
-                        onChanged: (v) {
-                          setState(() {
-                            if (v == true) {
-                              _selectedStores.add(s);
-                            } else {
-                              _selectedStores.remove(s);
-                            }
-                          });
-                          setDialogState(() {});
-                        },
-                      ),
-                    )
-                    .toList(),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(isRtl ? 'حفظ' : 'Done'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   Future<void> _save() async {
     final name = _name.text.trim();
     if (name.isEmpty) {
@@ -363,7 +322,6 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     setState(() => _busy = true);
     final now = DateTime.now();
     final existing = widget.item;
-    final price = double.tryParse(_price.text.trim());
 
     // 1. Determine if we should update an existing item based on barcode
     int? itemId = existing?.id;
@@ -380,7 +338,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       barcode: barcode.isEmpty ? null : barcode,
       nameEn: name,
       nameAr: null,
-      price: price,
+      price: null, // Prices are now store-specific
       currency: _currency,
       imageUrl: _imageUrl,
       categoryId: _selectedCategory?.id,
@@ -406,6 +364,9 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     // 2. Update store relationships
     await ItemStoreDao.instance.deleteByItemId(itemId);
     for (final store in _selectedStores) {
+      final priceText = _storePriceControllers[store.id]?.text.trim() ?? '';
+      final price = double.tryParse(priceText);
+
       await ItemStoreDao.instance.upsert(
         ItemStore(
           itemId: itemId,
@@ -480,89 +441,47 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: TextFormField(
-                      controller: _price,
-                      decoration: InputDecoration(
-                        labelText: isRtl ? 'السعر' : 'Price',
-                        prefixIcon: const Icon(Icons.attach_money),
-                      ),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  DropdownButton<AppCurrency>(
-                    value: _currency,
-                    items: const [
-                      DropdownMenuItem(
-                        value: AppCurrency.sar,
-                        child: Text('SAR ﷼'),
-                      ),
-                      DropdownMenuItem(
-                        value: AppCurrency.usd,
-                        child: Text('USD \$'),
-                      ),
-                    ],
-                    onChanged: (v) {
-                      if (v != null) {
-                        setState(() => _currency = v);
-                      }
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<Category?>(
-                      initialValue: _selectedCategory,
-                      decoration: InputDecoration(
-                        labelText: isRtl ? 'التصنيف' : 'Category',
-                        prefixIcon: const Icon(Icons.category_outlined),
-                      ),
-                      items: [
-                        DropdownMenuItem<Category?>(
-                          value: null,
-                          child: Text(isRtl ? '— لا يوجد —' : '— None —'),
+                    child: DropdownButton<AppCurrency>(
+                      value: _currency,
+                      items: const [
+                        DropdownMenuItem(
+                          value: AppCurrency.sar,
+                          child: Text('SAR ﷼'),
                         ),
-                        ..._categories.map(
-                          (c) => DropdownMenuItem<Category?>(
-                            value: c,
-                            child: Text(
-                              c.displayName(
-                                locale.locale?.languageCode ?? 'en',
-                              ),
-                            ),
-                          ),
+                        DropdownMenuItem(
+                          value: AppCurrency.usd,
+                          child: Text('USD \$'),
                         ),
                       ],
-                      onChanged: (v) => setState(() => _selectedCategory = v),
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() => _currency = v);
+                        }
+                      },
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(
-                    onPressed: _addNewCategory,
-                    icon: const Icon(Icons.add),
-                    tooltip: isRtl ? 'إضافة تصنيف' : 'Add Category',
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              ListTile(
-                title: Text(isRtl ? 'المتاجر' : 'Stores'),
-                subtitle: Text(
-                  _selectedStores.isEmpty
-                      ? (isRtl ? 'لم يتم اختيار أي متجر' : 'No stores selected')
-                      : '${_selectedStores.length} ${isRtl ? 'متاجر' : 'stores'}',
-                  style: TextStyle(fontSize: 12),
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _showStoreSelector,
-                shape: RoundedRectangleBorder(
-                  side: BorderSide(color: Theme.of(context).dividerColor),
-                  borderRadius: BorderRadius.circular(4),
-                ),
+              StorePriceSelector(
+                selectedStores: _selectedStores,
+                allStores: _stores,
+                priceControllers: _storePriceControllers,
+                onStoreToggled: (Store store) {
+                  setState(() {
+                    if (_selectedStores.contains(store)) {
+                      _selectedStores.remove(store);
+                      _storePriceControllers.remove(store.id);
+                      _storePriceControllers[store.id]?.dispose();
+                    } else {
+                      _selectedStores.add(store);
+                      _storePriceControllers.putIfAbsent(
+                        store.id!,
+                        () => TextEditingController(),
+                      );
+                    }
+                  });
+                },
               ),
               const SizedBox(height: 12),
               Row(

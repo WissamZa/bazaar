@@ -49,13 +49,26 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
           await ListItemDao.instance.forListWithItems(widget.list.id!);
       final stores = await StoreDao.instance.all();
 
-      // Build enriched row data with the preferred store resolved.
+      // Build enriched row data with the preferred store and its price resolved.
       final rows = <RowData>[];
       for (final (item, li) in pairs) {
         final store = li.preferredStoreId == null
             ? null
             : stores.where((s) => s.id == li.preferredStoreId).firstOrNull;
-        rows.add(RowData(item: item, listItem: li, preferredStore: store));
+
+        double? price;
+        if (store != null) {
+          final rel = await ItemStoreDao.instance
+              .findByItemAndStore(item.id!, store.id!);
+          price = rel?.price;
+        }
+
+        rows.add(RowData(
+          item: item,
+          listItem: li,
+          preferredStore: store,
+          preferredPrice: price,
+        ));
       }
       if (!mounted) return;
       setState(() {
@@ -74,7 +87,7 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     double sum = 0;
     for (final r in _rows) {
       if (checkedOnly && !r.listItem.isChecked) continue;
-      final price = r.item.price ?? 0;
+      final price = r.preferredPrice ?? 0;
       sum += price * r.listItem.quantity;
     }
     return sum;
@@ -92,9 +105,11 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     if (allItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isRtl
-              ? 'لا توجد منتجات. أضف منتجاً أولاً.'
-              : 'No items yet. Add an item first.',),
+          content: Text(
+            isRtl
+                ? 'لا توجد منتجات. أضف منتجاً أولاً.'
+                : 'No items yet. Add an item first.',
+          ),
           action: SnackBarAction(
             label: isRtl ? 'إضافة منتج' : 'Add Item',
             onPressed: () async {
@@ -141,26 +156,61 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
       },
     );
     if (picked == null || picked.id == null) return;
+
+    final storePicked = await showDialog<Store>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text(isRtl ? 'اختر المتجر' : 'Select Store'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: stores
+                  .map((s) => ListTile(
+                        title: Text(
+                            s.displayName(locale.locale?.languageCode ?? 'en')),
+                        onTap: () => Navigator.pop(ctx, s),
+                      ))
+                  .toList(),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (storePicked == null) return;
+
     try {
-      await ListItemDao.instance.insert(ListItem(
-        listId: widget.list.id!,
-        itemId: picked.id!,
-        quantity: 1,
-      ),);
+      await ListItemDao.instance.insert(
+        ListItem(
+          listId: widget.list.id!,
+          itemId: picked.id!,
+          quantity: 1,
+          preferredStoreId: storePicked.id,
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-            isRtl ? 'العنصر موجود بالفعل في القائمة' : 'Item already in list',),
-      ),);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isRtl ? 'العنصر موجود بالفعل في القائمة' : 'Item already in list',
+          ),
+        ),
+      );
     }
     _refresh();
   }
 
   String? _storeNameForItem(
-      Item item, List<Store> stores, LocaleProvider locale,) {
-    // The item itself doesn't carry a single store; we just show the
-    // user-set price. The actual per-store links live in item_store.
+    Item item,
+    List<Store> stores,
+    LocaleProvider locale,
+  ) {
+    // For the lookup list, we can't easily know which stores sell it without a query.
+    // But if we have the stores list, we could potentially check.
+    // For now, let's just return null as the item doesn't have a "default" store.
     return null;
   }
 
@@ -196,9 +246,11 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     if (stores.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isRtl
-              ? 'لا توجد متاجر. أضف متجراً أولاً.'
-              : 'No stores yet. Add a store first.',),
+          content: Text(
+            isRtl
+                ? 'لا توجد متاجر. أضف متجراً أولاً.'
+                : 'No stores yet. Add a store first.',
+          ),
         ),
       );
       return;
@@ -214,9 +266,9 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
         return StatefulBuilder(
           builder: (ctx, setSt) {
             return AlertDialog(
-              title: Text(isRtl
-                  ? 'أضف سعراً في متجر آخر'
-                  : 'Add price at another store',),
+              title: Text(
+                isRtl ? 'أضف سعراً في متجر آخر' : 'Add price at another store',
+              ),
               content: SizedBox(
                 width: double.maxFinite,
                 child: SingleChildScrollView(
@@ -236,11 +288,16 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                           prefixIcon: const Icon(Icons.storefront_outlined),
                         ),
                         items: stores
-                            .map((s) => DropdownMenuItem(
-                                  value: s,
-                                  child: Text(s.displayName(
-                                      locale.locale?.languageCode ?? 'en',),),
-                                ),)
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(
+                                  s.displayName(
+                                    locale.locale?.languageCode ?? 'en',
+                                  ),
+                                ),
+                              ),
+                            )
                             .toList(),
                         onChanged: (v) {
                           if (v != null) setSt(() => selected = v);
@@ -254,7 +311,8 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                           prefixIcon: const Icon(Icons.attach_money),
                         ),
                         keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,),
+                          decimal: true,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
@@ -287,12 +345,17 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Expanded(
-                                  child: Text(s.displayName(
-                                      locale.locale?.languageCode ?? 'en',),),
+                                  child: Text(
+                                    s.displayName(
+                                      locale.locale?.languageCode ?? 'en',
+                                    ),
+                                  ),
                                 ),
-                                Text(e.price == null
-                                    ? '—'
-                                    : e.currency.format(e.price!),),
+                                Text(
+                                  e.price == null
+                                      ? '—'
+                                      : e.currency.format(e.price!),
+                                ),
                               ],
                             ),
                           );
@@ -332,10 +395,12 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     // Update the item's "default" price if it had none or if the new
     // price is lower (cheap-store defaulting is a polite UX touch).
     if (item.price == null || (price != null && price < item.price!)) {
-      await ItemDao.instance.update(item.copyWith(
-        price: price,
-        updatedAt: DateTime.now(),
-      ),);
+      await ItemDao.instance.update(
+        item.copyWith(
+          price: price,
+          updatedAt: DateTime.now(),
+        ),
+      );
     }
     _refresh();
   }
@@ -397,7 +462,7 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     final item = data.item;
     final li = data.listItem;
     final store = data.preferredStore;
-    final price = item.price;
+    final price = data.preferredPrice;
     final lineTotal = (price ?? 0) * li.quantity;
 
     return Card(
@@ -440,8 +505,11 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.attach_money,
-                                  size: 14, color: Colors.grey,),
+                              const Icon(
+                                Icons.attach_money,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
                               CurrencyDisplay(
                                 amount: price,
                                 overrideCurrency: item.currency,
@@ -460,8 +528,11 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.attach_money,
-                                  size: 14, color: Colors.grey,),
+                              const Icon(
+                                Icons.attach_money,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
                               Text(
                                 isRtl ? 'سعر غير محدد' : 'No price',
                                 style: Theme.of(context)
@@ -475,8 +546,11 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.storefront_outlined,
-                                  size: 14, color: Colors.grey,),
+                              const Icon(
+                                Icons.storefront_outlined,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
                               Text(
                                 store.displayName(langCode),
                                 style: Theme.of(context)
@@ -490,8 +564,11 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.storefront_outlined,
-                                  size: 14, color: Colors.grey,),
+                              const Icon(
+                                Icons.storefront_outlined,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
                               Text(
                                 isRtl ? 'لا متجر' : 'No store',
                                 style: Theme.of(context)
@@ -505,8 +582,11 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.qr_code,
-                                  size: 14, color: Colors.grey,),
+                              const Icon(
+                                Icons.qr_code,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
                               Text(
                                 item.barcode!,
                                 style: Theme.of(context)
@@ -549,6 +629,40 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     );
   }
 
+  Future<void> _changePreferredStore(ListItem li) async {
+    final locale = context.read<LocaleProvider>();
+    final isRtl = locale.isRtl;
+    final langCode = locale.locale?.languageCode ?? 'en';
+    final stores = await StoreDao.instance.all();
+
+    final Store? picked = await showDialog<Store>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isRtl ? 'اختر المتجر' : 'Select Store'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: stores
+                .map((s) => ListTile(
+                      title: Text(s.displayName(langCode)),
+                      selected: s.id == li.preferredStoreId,
+                      onTap: () => Navigator.pop(ctx, s),
+                    ))
+                .toList(),
+          ),
+        ),
+      ),
+    );
+
+    if (picked != null) {
+      await ListItemDao.instance.update(
+        li.copyWith(preferredStoreId: picked.id),
+      );
+      _refresh();
+    }
+  }
+
   void _showRowMenu(RowData data, bool isRtl) {
     showModalBottomSheet(
       context: context,
@@ -565,10 +679,18 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.store),
+              title: Text(isRtl ? 'تغيير المتجر' : 'Change store'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _changePreferredStore(data.listItem);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.add_business),
-              title: Text(isRtl
-                  ? 'أضف سعراً في متجر آخر'
-                  : 'Add price at another store',),
+              title: Text(
+                isRtl ? 'أضف سعراً في متجر آخر' : 'Add price at another store',
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _addPriceAtStore(data.item);
@@ -596,10 +718,12 @@ class RowData {
   final Item item;
   final ListItem listItem;
   final Store? preferredStore;
+  final double? preferredPrice;
   const RowData({
     required this.item,
     required this.listItem,
     required this.preferredStore,
+    this.preferredPrice,
   });
 }
 
@@ -636,7 +760,10 @@ class _SummaryBar extends StatelessWidget {
             ),
           ),
           Container(
-              width: 1, height: 32, color: Theme.of(context).dividerColor,),
+            width: 1,
+            height: 32,
+            color: Theme.of(context).dividerColor,
+          ),
           Expanded(
             child: _Stat(
               icon: Icons.shopping_cart_checkout,
@@ -683,10 +810,12 @@ class _Stat extends StatelessWidget {
             Text(label, style: Theme.of(context).textTheme.bodySmall),
             if (child != null) child!,
             if (child == null)
-              Text(value ?? '',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),),
+              Text(
+                value ?? '',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
           ],
         ),
       ],

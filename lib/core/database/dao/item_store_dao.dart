@@ -49,4 +49,14 @@ class ItemStoreDao {
     );
     return rows.map(ItemStore.fromDb).toList();
   }
+
+  Future<ItemStore?> findByItemAndStore(int itemId, int storeId) async {
+    final db = await _db;
+    final rows = await db.query(
+      'item_store',
+      where: 'item_id = ? AND store_id = ?',
+      whereArgs: [itemId, storeId],
+    );
+    return rows.isEmpty ? null : ItemStore.fromDb(rows.first);
+  }
 }
