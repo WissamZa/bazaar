@@ -4,9 +4,12 @@ import 'package:provider/provider.dart';
 import '../core/providers/locale_provider.dart';
 import 'home/home_screen.dart';
 import 'items/items_screen.dart';
+import 'items/add_edit_item_screen.dart';
 import 'settings/settings_screen.dart';
 import 'shopping_lists/lists_screen.dart';
+import 'shopping_lists/add_edit_list_screen.dart';
 import 'stores/stores_screen.dart';
+import 'stores/add_edit_store_screen.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/language_toggle.dart';
 import '../widgets/theme_toggle.dart';
@@ -41,8 +44,10 @@ class _HomeShellState extends State<HomeShell> {
       appBar: AppBar(
         title: Row(
           children: [
-            Icon(Icons.shopping_basket_rounded,
-                color: Theme.of(context).colorScheme.primary,),
+            Icon(
+              Icons.shopping_basket_rounded,
+              color: Theme.of(context).colorScheme.primary,
+            ),
             const SizedBox(width: 8),
             Text(titles[_index]),
           ],
@@ -59,6 +64,7 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ],
       ),
+      floatingActionButton: _buildFAB(locale),
       body: IndexedStack(
         index: _index,
         children: _screens,
@@ -68,5 +74,37 @@ class _HomeShellState extends State<HomeShell> {
         onTap: (i) => setState(() => _index = i),
       ),
     );
+  }
+
+  Widget _buildFAB(LocaleProvider locale) {
+    final isRtl = locale.isRtl;
+    switch (_index) {
+      case 1: // Items
+        return FloatingActionButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const AddEditItemScreen()),
+          ),
+          tooltip: isRtl ? 'إضافة منتج' : 'Add Item',
+          child: const Icon(Icons.add),
+        );
+      case 2: // Lists
+        return FloatingActionButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const AddEditListScreen()),
+          ),
+          tooltip: isRtl ? 'إضافة قائمة' : 'Add List',
+          child: const Icon(Icons.add),
+        );
+      case 3: // Stores
+        return FloatingActionButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const AddEditStoreScreen()),
+          ),
+          tooltip: isRtl ? 'إضافة متجر' : 'Add Store',
+          child: const Icon(Icons.add),
+        );
+      default:
+        return const SizedBox.shrink();
+    }
   }
 }

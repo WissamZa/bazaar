@@ -125,39 +125,81 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     }
     final stores = await StoreDao.instance.all();
     if (!mounted) return;
-    final Item? picked = await showDialog<Item>(
+
+    final List<Item>? pickedItems = await showDialog<List<Item>>(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          title: Text(isRtl ? 'أضف منتجاً إلى القائمة' : 'Add item to list'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView(
-              shrinkWrap: true,
-              children: allItems.map((it) {
-                final storeName = _storeNameForItem(it, stores, locale);
-                return ListTile(
-                  title:
-                      Text(it.displayName(locale.locale?.languageCode ?? 'en')),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (it.barcode != null) Text(it.barcode!),
-                      if (storeName != null) Text(storeName),
-                    ],
-                  ),
-                  trailing: CurrencyDisplay(amount: it.price),
-                  onTap: () => Navigator.pop(ctx, it),
-                );
-              }).toList(),
-            ),
-          ),
+        return StatefulBuilder(
+          builder: (ctx, setSState) {
+            final selected = <Item>{};
+            return AlertDialog(
+              title:
+                  Text(isRtl ? 'أضف منتجات إلى القائمة' : 'Add items to list'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: allItems.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 4),
+                  itemBuilder: (ctx, i) {
+                    final it = allItems[i];
+                    final storeName = _storeNameForItem(it, stores, locale);
+                    final isSelected = selected.contains(it);
+                    return ListTile(
+                      leading: Checkbox(
+                        value: isSelected,
+                        onChanged: (v) {
+                          setSState(() {
+                            if (v == true) {
+                              selected.add(it);
+                            } else {
+                              selected.remove(it);
+                            }
+                          });
+                        },
+                      ),
+                      title: Text(
+                          it.displayName(locale.locale?.languageCode ?? 'en')),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (it.barcode != null) Text(it.barcode!),
+                          if (storeName != null) Text(storeName),
+                        ],
+                      ),
+                      trailing: CurrencyDisplay(amount: it.price),
+                      onTap: () {
+                        setSState(() {
+                          if (selected.contains(it)) {
+                            selected.remove(it);
+                          } else {
+                            selected.add(it);
+                          }
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, selected.toList()),
+                  child: Text(isRtl ? 'إضافة المحدد' : 'Add Selected'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
-    if (picked == null || picked.id == null) return;
 
-    final storePicked = await showDialog<Store>(
+    if (pickedItems == null || pickedItems.isEmpty) return;
+
+    final Store? storePicked = await showDialog<Store>(
       context: context,
       builder: (ctx) {
         return AlertDialog(
@@ -181,24 +223,19 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
 
     if (storePicked == null) return;
 
-    try {
-      await ListItemDao.instance.insert(
-        ListItem(
-          listId: widget.list.id!,
-          itemId: picked.id!,
-          quantity: 1,
-          preferredStoreId: storePicked.id,
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isRtl ? 'العنصر موجود بالفعل في القائمة' : 'Item already in list',
+    for (final item in pickedItems) {
+      try {
+        await ListItemDao.instance.insert(
+          ListItem(
+            listId: widget.list.id!,
+            itemId: item.id!,
+            quantity: 1,
+            preferredStoreId: storePicked.id,
           ),
-        ),
-      );
+        );
+      } catch (_) {
+        // Ignore duplicates
+      }
     }
     _refresh();
   }
@@ -421,6 +458,11 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.list.displayName(langCode)),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addItem,
+        tooltip: isRtl ? 'إضافة منتج' : 'Add Item',
+        child: const Icon(Icons.add),
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

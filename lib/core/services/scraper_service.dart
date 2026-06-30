@@ -149,6 +149,33 @@ class ScraperService {
     }
   }
 
+  /// Specialized lookup for SearXNG that returns all results.
+  Future<List<ScrapedProduct>> searchBarcodeSearXNGMulti(String barcode) async {
+    final url = Uri.parse(
+      'https://cachyos-nitro.tail3d23b7.ts.net:8080/search?q=$barcode&format=json',
+    );
+    try {
+      final res = await http.get(url, headers: _headers).timeout(_timeout);
+      if (res.statusCode != 200) return [];
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      final results = json['results'] as List?;
+      if (results == null) return [];
+
+      return results.map((r) {
+        final map = r as Map<String, dynamic>;
+        return ScrapedProduct(
+          name: map['title'] as String? ?? 'Unknown Product',
+          price: null,
+          currency: 'SAR',
+          source: 'SearXNG',
+          imageUrl: map['img_src'] as String?,
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   // ───────────────────────── Open Food Facts ──────────────────────────
   /// Free, no key, returns structured JSON. The most reliable source for the
   /// product NAME (and AR name when available). Price is intentionally null

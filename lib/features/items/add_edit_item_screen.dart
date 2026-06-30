@@ -127,6 +127,62 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     if (picked == null) return;
 
     setState(() => _busy = true);
+    if (picked == LookupSource.searxng) {
+      final results =
+          await ScraperService.instance.searchBarcodeSearXNGMulti(code);
+      setState(() => _busy = false);
+
+      if (results.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              locale.isRtl
+                  ? 'لم يتم العثور على نتائج في سيركس إن جي'
+                  : 'No results found in SearXNG',
+            ),
+          ),
+        );
+        return;
+      }
+
+      final ScrapedProduct? pickedProduct = await showDialog<ScrapedProduct>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(
+              locale.isRtl ? 'اختر المنتج الصحيح' : 'Pick the right product'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: results.length,
+              separatorBuilder: (_, __) => const Divider(),
+              itemBuilder: (ctx, i) {
+                final p = results[i];
+                return ListTile(
+                  leading: p.imageUrl != null
+                      ? Image.network(p.imageUrl!,
+                          width: 40, height: 40, fit: BoxFit.cover)
+                      : const Icon(Icons.image),
+                  title: Text(p.name),
+                  onTap: () => Navigator.pop(ctx, p),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      if (pickedProduct != null) {
+        setState(() {
+          _name.text = pickedProduct.name;
+          _currency = CurrencyExtension.fromCode(pickedProduct.currency);
+          _imageUrl = pickedProduct.imageUrl;
+        });
+      }
+      return;
+    }
+
     final lookup = picked == LookupSource.auto
         ? await BarcodeService.instance.lookup(code)
         : await BarcodeService.instance.lookupFromSource(code, picked);
