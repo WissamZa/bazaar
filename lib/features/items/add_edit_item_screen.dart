@@ -78,7 +78,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     _selectedStores = {};
     _storePriceControllers.clear();
 
-    if (widget.item != null) {
+    if (widget.item != null && widget.item!.id != null) {
       final relations = await ItemStoreDao.instance.forItem(widget.item!.id!);
       final ids = relations.map((r) => r.storeId).toSet();
       _selectedStores = _stores.where((s) => ids.contains(s.id)).toSet();
@@ -477,18 +477,20 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
             ],
           ),
         ),
-        bottomNavigationBar: Padding(
-          padding: const EdgeInsets.all(16),
-          child: FilledButton.icon(
-            onPressed: _busy ? null : _save,
-            icon: _busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save),
-            label: Text(isRtl ? 'حفظ' : 'Save'),
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: FilledButton.icon(
+              onPressed: _busy ? null : _save,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save),
+              label: Text(isRtl ? 'حفظ' : 'Save'),
+            ),
           ),
         ),
       ),
@@ -647,7 +649,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   }
 
   Widget _buildHistoryTab(BuildContext context, bool isRtl) {
-    if (widget.item == null) {
+    if (widget.item == null || widget.item!.id == null) {
       return Center(
         child: Text(isRtl
             ? 'يجب حفظ المنتج أولاً لرؤية التاريخ'
