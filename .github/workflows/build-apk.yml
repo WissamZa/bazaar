@@ -53,6 +53,18 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Determine Version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Extract version from tag (e.g., v1.2.3 -> 1.2.3)
+            VERSION_NAME="${GITHUB_REF#refs/tags/v}"
+            echo "BUILD_NAME=$VERSION_NAME" >> $GITHUB_ENV
+            echo "BUILD_NUMBER=${{ github.run_number }}" >> $GITHUB_ENV
+            echo "Using tag version: $VERSION_NAME (build ${{ github.run_number }})"
+          else
+            echo "Using version from pubspec.yaml"
+          fi
+
       - name: Verify analysis
         run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
 
@@ -90,7 +102,12 @@ jobs:
           echo "Wrote android/key.properties (alias=$ALIAS)"
 
       - name: Build APK
-        run: flutter build apk --split-per-abi --release --no-tree-shake-icons
+        run: |
+          if [ -n "$BUILD_NAME" ]; then
+            flutter build apk --split-per-abi --release --no-tree-shake-icons --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER"
+          else
+            flutter build apk --split-per-abi --release --no-tree-shake-icons
+          fi
 
       - name: Locate and Rename APKs
         id: apks
