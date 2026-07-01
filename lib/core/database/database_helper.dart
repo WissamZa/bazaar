@@ -8,7 +8,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._();
 
   static const _dbName = 'bazaar.db';
-  static const _dbVersion = 4;
+  static const _dbVersion = 5;
 
   Database? _db;
 
@@ -71,8 +71,10 @@ class DatabaseHelper {
       CREATE TABLE items (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         barcode    TEXT UNIQUE,
+        brand      TEXT,
         name_en    TEXT NOT NULL,
         name_ar    TEXT,
+        note       TEXT,
         price      REAL,
         currency   TEXT DEFAULT 'SAR',
         image_url  TEXT,
@@ -146,6 +148,10 @@ class DatabaseHelper {
     }
     if (oldV < 4) {
       await db.execute('ALTER TABLE stores ADD COLUMN image_url TEXT;');
+    }
+    if (oldV < 5) {
+      await db.execute('ALTER TABLE items ADD COLUMN brand TEXT;');
+      await db.execute('ALTER TABLE items ADD COLUMN note TEXT;');
     }
   }
 

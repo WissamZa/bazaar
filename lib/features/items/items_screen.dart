@@ -17,6 +17,12 @@ enum SortOption {
   nameZA,
 }
 
+enum GroupOption {
+  none,
+  brand,
+  category,
+}
+
 class ItemsScreen extends StatefulWidget {
   const ItemsScreen({super.key});
 
@@ -30,6 +36,7 @@ class _ItemsScreenState extends State<ItemsScreen> {
   bool _loading = true;
   String _query = '';
   SortOption _sortOption = SortOption.newest;
+  GroupOption _groupOption = GroupOption.none;
 
   @override
   void initState() {
@@ -61,12 +68,14 @@ class _ItemsScreenState extends State<ItemsScreen> {
           items.sort((a, b) => (b.price ?? 0).compareTo(a.price ?? 0));
           break;
         case SortOption.nameAZ:
-          items.sort((a, b) =>
-              a.nameEn.toLowerCase().compareTo(b.nameEn.toLowerCase()),);
+          items.sort(
+            (a, b) => a.nameEn.toLowerCase().compareTo(b.nameEn.toLowerCase()),
+          );
           break;
         case SortOption.nameZA:
-          items.sort((a, b) =>
-              b.nameEn.toLowerCase().compareTo(a.nameEn.toLowerCase()),);
+          items.sort(
+            (a, b) => b.nameEn.toLowerCase().compareTo(a.nameEn.toLowerCase()),
+          );
           break;
       }
 
@@ -118,6 +127,10 @@ class _ItemsScreenState extends State<ItemsScreen> {
                 icon: const Icon(Icons.sort),
                 onPressed: () => _showSortMenu(context, locale),
               ),
+              IconButton(
+                icon: const Icon(Icons.grid_view),
+                onPressed: () => _showGroupMenu(context, locale),
+              ),
             ],
           ),
         ),
@@ -137,73 +150,120 @@ class _ItemsScreenState extends State<ItemsScreen> {
                     )
                   : RefreshIndicator(
                       onRefresh: _refresh,
-                      child: ListView.builder(
-                        itemCount: _items.length,
-                        itemBuilder: (_, i) {
-                          final item = _items[i];
-                          return Dismissible(
-                            key: ValueKey(item.id ?? i),
-                            direction: DismissDirection.endToStart,
-                            background: Container(
-                              color: Colors.red,
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.only(right: 24),
-                              child:
-                                  const Icon(Icons.delete, color: Colors.white),
-                            ),
-                            confirmDismiss: (_) async {
-                              return await showDialog<bool>(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      title: Text(locale.isRtl
-                                          ? 'تأكيد الحذف؟'
-                                          : 'Confirm delete?',),
-                                      content: Text(locale.isRtl
-                                          ? 'لا يمكن التراجع عن هذا الإجراء.'
-                                          : 'This action cannot be undone.',),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(ctx, false),
-                                          child: Text(locale.isRtl
-                                              ? 'إلغاء'
-                                              : 'Cancel',),
-                                        ),
-                                        FilledButton(
-                                          onPressed: () =>
-                                              Navigator.pop(ctx, true),
-                                          child: Text(
-                                              locale.isRtl ? 'حذف' : 'Delete',),
-                                        ),
-                                      ],
-                                    ),
-                                  ) ??
-                                  false;
-                            },
-                            onDismissed: (_) async {
-                              await ItemDao.instance.delete(item.id!);
-                              _items.removeAt(i);
-                              setState(() {});
-                            },
-                            child: ListTile(
-                              title: Text(item.displayName(
-                                  locale.locale?.languageCode ?? 'en',),),
-                              subtitle: item.barcode == null
-                                  ? null
-                                  : Text(
-                                      ' Barcode: ${item.barcode}',
-                                      style:
-                                          Theme.of(context).textTheme.bodySmall,
-                                    ),
-                              trailing: CurrencyDisplay(amount: item.price),
-                              onTap: () => _openAddEdit(item: item),
-                            ),
-                          );
-                        },
-                      ),
+                      child: _buildList(context, locale),
                     ),
         ),
       ],
+    );
+  }
+
+  Widget _buildList(BuildContext context, LocaleProvider locale) {
+    final isRtl = locale.isRtl;
+
+    if (_groupOption == GroupOption.none) {
+      return ListView.builder(
+        itemCount: _items.length,
+        itemBuilder: (_, i) =>
+            _buildItemDismissible(context, _items[i], i, locale),
+      );
+    }
+
+    // Group items
+    final Map<String, List<Item>> grouped = {};
+    for (final item in _items) {
+      String key;
+      if (_groupOption == GroupOption.brand) {
+        key = item.brand?.trim().toUpperCase() ??
+            (isRtl ? 'بدون ماركة' : 'No Brand');
+      } else {
+        key = item.categoryId?.toString() ??
+            (isRtl ? 'بدون تصنيف' : 'No Category');
+      }
+      grouped.putIfAbsent(key, () => []).add(item);
+    }
+
+    final keys = grouped.keys.toList()..sort();
+
+    return ListView(
+      children: keys.map((key) {
+        final groupItems = grouped[key]!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              title: Text(key,
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              tileColor: Theme.of(context).colorScheme.surfaceVariant,
+            ),
+            ...groupItems.map((item) => _buildItemDismissible(
+                context, item, _items.indexOf(item), locale)),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildItemDismissible(
+      BuildContext context, Item item, int index, LocaleProvider locale) {
+    final isRtl = locale.isRtl;
+    final langCode = locale.locale?.languageCode ?? 'en';
+
+    return Dismissible(
+      key: ValueKey(item.id ?? index),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: Colors.red,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      confirmDismiss: (_) async {
+        return await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: Text(isRtl ? 'تأكيد الحذف؟' : 'Confirm delete?'),
+                content: Text(isRtl
+                    ? 'لا يمكن التراجع عن هذا الإجراء.'
+                    : 'This action cannot be undone.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: Text(isRtl ? 'حذف' : 'Delete'),
+                  ),
+                ],
+              ),
+            ) ??
+            false;
+      },
+      onDismissed: (_) async {
+        await ItemDao.instance.delete(item.id!);
+        _items.removeWhere((it) => it.id == item.id);
+        setState(() {});
+      },
+      child: ListTile(
+        title: Text(item.displayName(langCode)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (item.brand != null)
+              Text('${isRtl ? 'الماركة: ' : 'Brand: '}${item.brand}',
+                  style: Theme.of(context).textTheme.bodySmall),
+            if (item.barcode != null)
+              Text('Barcode: ${item.barcode}',
+                  style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              '${isRtl ? 'أضيف في ' : 'Added on '}${item.createdAt.toLocal().toString().split(' ')[0]}',
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ],
+        ),
+        trailing: CurrencyDisplay(amount: item.price),
+        onTap: () => _openAddEdit(item: item),
+      ),
     );
   }
 
@@ -274,6 +334,50 @@ class _ItemsScreenState extends State<ItemsScreen> {
             onTap: () {
               setState(() => _sortOption = SortOption.nameZA);
               _refresh();
+              Navigator.pop(ctx);
+            },
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  void _showGroupMenu(BuildContext context, LocaleProvider locale) {
+    final isRtl = locale.isRtl;
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              isRtl ? 'تجميع المنتجات' : 'Group Items',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.list),
+            title: Text(isRtl ? 'بدون تجميع' : 'No Grouping'),
+            onTap: () {
+              setState(() => _groupOption = GroupOption.none);
+              Navigator.pop(ctx);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.branding_watermark),
+            title: Text(isRtl ? 'حسب الماركة' : 'By Brand'),
+            onTap: () {
+              setState(() => _groupOption = GroupOption.brand);
+              Navigator.pop(ctx);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.category),
+            title: Text(isRtl ? 'حسب التصنيف' : 'By Category'),
+            onTap: () {
+              setState(() => _groupOption = GroupOption.category);
               Navigator.pop(ctx);
             },
           ),

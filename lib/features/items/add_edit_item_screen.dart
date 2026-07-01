@@ -32,6 +32,8 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _barcode;
+  late final TextEditingController _brand;
+  late final TextEditingController _note;
   final Map<int, TextEditingController> _storePriceControllers = {};
   late AppCurrency _currency;
   Set<Store> _selectedStores = {};
@@ -51,6 +53,8 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       ),
     );
     _barcode = TextEditingController(text: i?.barcode ?? '');
+    _brand = TextEditingController(text: i?.brand ?? '');
+    _note = TextEditingController(text: i?.note ?? '');
     _currency = i?.currency ?? AppCurrency.sar;
     _imageUrl = i?.imageUrl;
     _loadStores();
@@ -61,10 +65,11 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   void dispose() {
     _name.dispose();
     _barcode.dispose();
-    for (var ctrl in _storePriceControllers.values) {
-      ctrl.dispose();
+    _brand.dispose();
+    _note.dispose();
+    for (var c in _storePriceControllers.values) {
+      c.dispose();
     }
-    super.dispose();
   }
 
   Future<void> _loadStores() async {
@@ -392,8 +397,10 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     final item = Item(
       id: itemId,
       barcode: barcode.isEmpty ? null : barcode,
+      brand: _brand.text.trim().isEmpty ? null : _brand.text.trim(),
       nameEn: name,
       nameAr: null,
+      note: _note.text.trim().isEmpty ? null : _note.text.trim(),
       price: null, // Prices are now store-specific
       currency: _currency,
       imageUrl: _imageUrl,
@@ -466,6 +473,15 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                 textInputAction: TextInputAction.next,
               ),
               const SizedBox(height: 12),
+              TextFormField(
+                controller: _brand,
+                decoration: InputDecoration(
+                  labelText: isRtl ? 'الماركة' : 'Brand',
+                  prefixIcon: const Icon(Icons.branding_watermark),
+                ),
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 12),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -492,6 +508,16 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                     tooltip: isRtl ? 'بحث عن باركود' : 'Lookup Barcode',
                   ),
                 ],
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _note,
+                decoration: InputDecoration(
+                  labelText: isRtl ? 'ملاحظات' : 'Notes',
+                  prefixIcon: const Icon(Icons.note_alt_outlined),
+                ),
+                maxLines: 3,
+                textInputAction: TextInputAction.done,
               ),
               const SizedBox(height: 12),
               Row(

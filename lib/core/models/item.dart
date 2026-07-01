@@ -7,8 +7,10 @@ import '../../core/constants/currencies.dart';
 class Item {
   final int? id;
   final String? barcode;
+  final String? brand;
   final String nameEn;
   final String? nameAr;
+  final String? note;
   final double? price;
   final AppCurrency currency;
   final String? imageUrl;
@@ -19,8 +21,10 @@ class Item {
   const Item({
     this.id,
     this.barcode,
+    this.brand,
     required this.nameEn,
     this.nameAr,
+    this.note,
     this.price,
     this.currency = AppCurrency.sar,
     this.imageUrl,
@@ -32,8 +36,10 @@ class Item {
   Item copyWith({
     int? id,
     String? barcode,
+    String? brand,
     String? nameEn,
     String? nameAr,
+    String? note,
     double? price,
     AppCurrency? currency,
     String? imageUrl,
@@ -44,8 +50,10 @@ class Item {
     return Item(
       id: id ?? this.id,
       barcode: barcode ?? this.barcode,
+      brand: brand ?? this.brand,
       nameEn: nameEn ?? this.nameEn,
       nameAr: nameAr ?? this.nameAr,
+      note: note ?? this.note,
       price: price ?? this.price,
       currency: currency ?? this.currency,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -73,8 +81,10 @@ class Item {
   Map<String, dynamic> toJson() => {
         'id': id,
         'barcode': barcode,
+        'brand': brand,
         'name_en': nameEn,
         'name_ar': nameAr,
+        'note': note,
         'price': price,
         'currency': currency.code,
         'image_url': imageUrl,
@@ -87,8 +97,10 @@ class Item {
     return Item(
       id: json['id'] as int?,
       barcode: json['barcode'] as String?,
+      brand: json['brand'] as String?,
       nameEn: (json['name_en'] as String?) ?? (json['nameEn'] as String?) ?? '',
       nameAr: json['name_ar'] as String? ?? json['nameAr'] as String?,
+      note: json['note'] as String?,
       price: (json['price'] as num?)?.toDouble(),
       currency: CurrencyExtension.fromCode(
         (json['currency'] as String?) ?? 'SAR',
@@ -112,8 +124,10 @@ class Item {
     return Item(
       id: row['id'] as int?,
       barcode: row['barcode'] as String?,
+      brand: row['brand'] as String?,
       nameEn: row['name_en'] as String,
       nameAr: row['name_ar'] as String?,
+      note: row['note'] as String?,
       price: (row['price'] as num?)?.toDouble(),
       currency: CurrencyExtension.fromCode(
         (row['currency'] as String?) ?? 'SAR',
@@ -128,8 +142,10 @@ class Item {
   Map<String, dynamic> toDb() => {
         if (id != null) 'id': id,
         'barcode': barcode,
+        'brand': brand,
         'name_en': nameEn,
         'name_ar': nameAr,
+        'note': note,
         'price': price,
         'currency': currency.code,
         'image_url': imageUrl,

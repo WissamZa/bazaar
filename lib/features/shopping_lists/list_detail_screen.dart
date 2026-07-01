@@ -42,8 +42,10 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     _refresh();
   }
 
-  Future<void> _refresh() async {
-    setState(() => _loading = true);
+  Future<void> _refresh({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() => _loading = true);
+    }
     try {
       final pairs =
           await ListItemDao.instance.forListWithItems(widget.list.id!);
@@ -78,9 +80,31 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
       debugPrint('Error refreshing list details: $e');
     } finally {
       if (mounted) {
-        setState(() => _loading = false);
+        if (showLoading) {
+          setState(() => _loading = false);
+        }
       }
     }
+  }
+
+  void _updateLocalListItem(int id, {bool? isChecked, int? quantity}) {
+    final index = _rows.indexWhere((r) => r.listItem.id == id);
+    if (index == -1) return;
+
+    final li = _rows[index].listItem;
+    final updatedLi = li.copyWith(
+      isChecked: isChecked ?? li.isChecked,
+      quantity: quantity ?? li.quantity,
+    );
+
+    setState(() {
+      _rows[index] = RowData(
+        item: _rows[index].item,
+        listItem: updatedLi,
+        preferredStore: _rows[index].preferredStore,
+        preferredPrice: _rows[index].preferredPrice,
+      );
+    });
   }
 
   double _computeTotal({bool checkedOnly = false}) {
@@ -129,9 +153,9 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     final List<Item>? pickedItems = await showDialog<List<Item>>(
       context: context,
       builder: (ctx) {
+        final selected = <Item>{};
         return StatefulBuilder(
           builder: (ctx, setSState) {
-            final selected = <Item>{};
             return AlertDialog(
               title:
                   Text(isRtl ? 'أضف منتجات إلى القائمة' : 'Add items to list'),
@@ -252,14 +276,17 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
   }
 
   Future<void> _toggleCheck(ListItem li) async {
-    await ListItemDao.instance.setChecked(li.id!, !li.isChecked);
-    _refresh();
+    final newChecked = !li.isChecked;
+    _updateLocalListItem(li.id!, isChecked: newChecked);
+    await ListItemDao.instance.setChecked(li.id!, newChecked);
+    _refresh(showLoading: false);
   }
 
   Future<void> _changeQuantity(ListItem li, int delta) async {
     final newQty = (li.quantity + delta).clamp(1, 999);
+    _updateLocalListItem(li.id!, quantity: newQty);
     await ListItemDao.instance.setQuantity(li.id!, newQty);
-    _refresh();
+    _refresh(showLoading: false);
   }
 
   /// Open the Add/Edit item form so the user can update price, store, etc.
@@ -458,11 +485,13 @@ class _ListDetailScreenState extends State<ListDetailScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.list.displayName(langCode)),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addItem,
-        tooltip: isRtl ? 'إضافة منتج' : 'Add Item',
-        child: const Icon(Icons.add),
+        actions: [
+          IconButton(
+            onPressed: _addItem,
+            tooltip: isRtl ? 'إضافة منتج' : 'Add Item',
+            icon: const Icon(Icons.add),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

@@ -86,8 +86,9 @@ class ItemDao {
     final q = '%$query%';
     final rows = await db.query(
       'items',
-      where: 'name_en LIKE ? OR name_ar LIKE ? OR barcode LIKE ?',
-      whereArgs: [q, q, q],
+      where:
+          'name_en LIKE ? OR name_ar LIKE ? OR barcode LIKE ? OR brand LIKE ?',
+      whereArgs: [q, q, q, q],
       orderBy: 'updated_at DESC',
     );
     return rows.map(Item.fromDb).toList();

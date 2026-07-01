@@ -17,20 +17,17 @@ class AddEditListScreen extends StatefulWidget {
 class _AddEditListScreenState extends State<AddEditListScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
-  late final TextEditingController _nameAr;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     _name = TextEditingController(text: widget.list?.name ?? '');
-    _nameAr = TextEditingController(text: widget.list?.nameAr ?? '');
   }
 
   @override
   void dispose() {
     _name.dispose();
-    _nameAr.dispose();
     super.dispose();
   }
 
@@ -43,7 +40,7 @@ class _AddEditListScreenState extends State<AddEditListScreen> {
     final list = ShoppingList(
       id: existing?.id,
       name: _name.text.trim(),
-      nameAr: _nameAr.text.trim().isEmpty ? null : _nameAr.text.trim(),
+      nameAr: null,
       owner: existing?.owner ?? owner,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
@@ -86,15 +83,6 @@ class _AddEditListScreenState extends State<AddEditListScreen> {
                 validator: (v) => (v == null || v.trim().isEmpty)
                     ? (locale.isRtl ? 'مطلوب' : 'Required')
                     : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _nameAr,
-                decoration: InputDecoration(
-                  labelText: locale.isRtl ? 'الاسم (عربي)' : 'Name (Arabic)',
-                  prefixIcon: const Icon(Icons.label_outline),
-                ),
-                textDirection: TextDirection.rtl,
               ),
               const SizedBox(height: 24),
               FilledButton.icon(
