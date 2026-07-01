@@ -8,8 +8,10 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'app.dart';
 import 'core/providers/currency_provider.dart';
 import 'core/providers/locale_provider.dart';
+import 'core/providers/scraping_provider.dart';
 import 'core/providers/theme_provider.dart';
 import 'core/providers/user_provider.dart';
+import 'core/services/scraper_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +27,7 @@ Future<void> main() async {
   final localeProv = LocaleProvider();
   final currencyProv = CurrencyProvider();
   final userProv = UserProvider();
+  final scrapingProv = ScrapingProvider();
 
   // Load persisted prefs before first frame so the UI doesn't flash defaults.
   await Future.wait([
@@ -32,7 +35,12 @@ Future<void> main() async {
     localeProv.load(),
     currencyProv.load(),
     userProv.load(),
+    scrapingProv.load(),
   ]);
+
+  // Inject the scraping config into the singleton scraper so it can use
+  // the user's chosen strategy / provider / API keys.
+  ScraperService.instance.config = scrapingProv;
 
   runApp(
     MultiProvider(
@@ -41,6 +49,7 @@ Future<void> main() async {
         ChangeNotifierProvider.value(value: localeProv),
         ChangeNotifierProvider.value(value: currencyProv),
         ChangeNotifierProvider.value(value: userProv),
+        ChangeNotifierProvider.value(value: scrapingProv),
       ],
       child: const BazaarApp(),
     ),
