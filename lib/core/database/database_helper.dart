@@ -8,7 +8,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._();
 
   static const _dbName = 'bazaar.db';
-  static const _dbVersion = 5;
+  static const _dbVersion = 6;
 
   Database? _db;
 
@@ -120,6 +120,18 @@ class DatabaseHelper {
       )
     ''');
 
+    batch.execute('''
+      CREATE TABLE item_price_history (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_store_id INTEGER REFERENCES item_store(id) ON DELETE CASCADE,
+        price         REAL,
+        currency      TEXT DEFAULT 'SAR',
+        recorded_at   TEXT NOT NULL
+      )
+    ''');
+    batch.execute(
+        'CREATE INDEX idx_price_history_store ON item_price_history(item_store_id)');
+
     batch.execute('CREATE INDEX idx_items_barcode ON items(barcode)');
     batch.execute('CREATE INDEX idx_list_items_list ON list_items(list_id)');
     batch.execute('CREATE INDEX idx_item_store_item ON item_store(item_id)');
@@ -153,6 +165,19 @@ class DatabaseHelper {
       await db.execute('ALTER TABLE items ADD COLUMN brand TEXT;');
       await db.execute('ALTER TABLE items ADD COLUMN note TEXT;');
     }
+    if (oldV < 6) {
+      await db.execute('''
+        CREATE TABLE item_price_history (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          item_store_id INTEGER REFERENCES item_store(id) ON DELETE CASCADE,
+          price         REAL,
+          currency      TEXT DEFAULT 'SAR',
+          recorded_at   TEXT NOT NULL
+        )
+      ''');
+      await db.execute(
+          'CREATE INDEX idx_price_history_store ON item_price_history(item_store_id)');
+    }
   }
 
   // ───────────────────────── Maintenance helpers ─────────────────────────
@@ -160,6 +185,7 @@ class DatabaseHelper {
     final db = await database;
     await db.transaction((txn) async {
       await txn.delete('list_items');
+      await txn.delete('item_price_history');
       await txn.delete('item_store');
       await txn.delete('shopping_lists');
       await txn.delete('items');

@@ -18,6 +18,7 @@ import '../scanner/scanner_screen.dart';
 import '../scanner/scan_result_screen.dart';
 import 'widgets/category_selector.dart';
 import 'widgets/store_price_selector.dart';
+import 'widgets/price_history_list.dart';
 
 /// Add or edit an [Item]. When [item] is null we are creating a new one.
 class AddEditItemScreen extends StatefulWidget {
@@ -449,167 +450,213 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   Widget build(BuildContext context) {
     final locale = context.watch<LocaleProvider>();
     final isRtl = locale.isRtl;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          isRtl
-              ? (widget.item == null ? 'إضافة منتج' : 'تعديل المنتج')
-              : (widget.item == null ? 'Add Item' : 'Edit Item'),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: _name,
-                decoration: InputDecoration(
-                  labelText: isRtl ? 'اسم المنتج' : 'Product Name',
-                  prefixIcon: const Icon(Icons.label_outline),
-                ),
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _brand,
-                decoration: InputDecoration(
-                  labelText: isRtl ? 'الماركة' : 'Brand',
-                  prefixIcon: const Icon(Icons.branding_watermark),
-                ),
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _barcode,
-                      decoration: InputDecoration(
-                        labelText: isRtl ? 'الباركود' : 'Barcode',
-                        prefixIcon: const Icon(Icons.qr_code),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(
-                    onPressed: _openScanner,
-                    icon: const Icon(Icons.qr_code_scanner),
-                    tooltip: isRtl ? 'مسح الباركود' : 'Scan Barcode',
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filledTonal(
-                    onPressed: _lookupBarcode,
-                    icon: const Icon(Icons.search),
-                    tooltip: isRtl ? 'بحث عن باركود' : 'Lookup Barcode',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _note,
-                decoration: InputDecoration(
-                  labelText: isRtl ? 'ملاحظات' : 'Notes',
-                  prefixIcon: const Icon(Icons.note_alt_outlined),
-                ),
-                maxLines: 3,
-                textInputAction: TextInputAction.done,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButton<AppCurrency>(
-                      value: _currency,
-                      items: const [
-                        DropdownMenuItem(
-                          value: AppCurrency.sar,
-                          child: Text('SAR ﷼'),
-                        ),
-                        DropdownMenuItem(
-                          value: AppCurrency.usd,
-                          child: Text('USD \$'),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) {
-                          setState(() => _currency = v);
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              StorePriceSelector(
-                selectedStores: _selectedStores,
-                allStores: _stores,
-                priceControllers: _storePriceControllers,
-                onStoreToggled: (Store store) {
-                  setState(() {
-                    if (_selectedStores.contains(store)) {
-                      _selectedStores.remove(store);
-                      _storePriceControllers.remove(store.id);
-                      _storePriceControllers[store.id]?.dispose();
-                    } else {
-                      _selectedStores.add(store);
-                      _storePriceControllers.putIfAbsent(
-                        store.id!,
-                        () => TextEditingController(),
-                      );
-                    }
-                  });
-                },
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton.icon(
-                      onPressed: _pickImage,
-                      icon: Icon(
-                        _imageUrl == null ? Icons.image : Icons.check_circle,
-                      ),
-                      label: Text(
-                        _imageUrl == null
-                            ? (isRtl ? 'إضافة صورة' : 'Add Image')
-                            : (isRtl ? 'تغيير الصورة' : 'Change Image'),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton.icon(
-                    onPressed: _pickImageUrl,
-                    icon: const Icon(Icons.link),
-                    label: Text(isRtl ? 'رابط' : 'URL'),
-                  ),
-                  if (_imageUrl != null)
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => setState(() => _imageUrl = null),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _busy ? null : _save,
-                icon: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save),
-                label: Text(isRtl ? 'حفظ' : 'Save'),
-              ),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            isRtl
+                ? (widget.item == null ? 'إضافة منتج' : 'تعديل المنتج')
+                : (widget.item == null ? 'Add Item' : 'Edit Item'),
+          ),
+          bottom: TabBar(
+            tabs: [
+              Tab(text: isRtl ? 'عام' : 'General'),
+              Tab(text: isRtl ? 'الأسعار' : 'Prices'),
+              Tab(text: isRtl ? 'تاريخ الأسعار' : 'History'),
             ],
           ),
         ),
+        body: Form(
+          key: _formKey,
+          child: TabBarView(
+            children: [
+              _buildGeneralTab(context, isRtl),
+              _buildPricesTab(context, isRtl),
+              _buildHistoryTab(context, isRtl),
+            ],
+          ),
+        ),
+        bottomNavigationBar: Padding(
+          padding: const EdgeInsets.all(16),
+          child: FilledButton.icon(
+            onPressed: _busy ? null : _save,
+            icon: _busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save),
+            label: Text(isRtl ? 'حفظ' : 'Save'),
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildGeneralTab(BuildContext context, bool isRtl) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFormField(
+            controller: _name,
+            decoration: InputDecoration(
+              labelText: isRtl ? 'اسم المنتج' : 'Product Name',
+              prefixIcon: const Icon(Icons.label_outline),
+            ),
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _brand,
+            decoration: InputDecoration(
+              labelText: isRtl ? 'الماركة' : 'Brand',
+              prefixIcon: const Icon(Icons.branding_watermark),
+            ),
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _barcode,
+                  decoration: InputDecoration(
+                    labelText: isRtl ? 'الباركود' : 'Barcode',
+                    prefixIcon: const Icon(Icons.qr_code),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                onPressed: _openScanner,
+                icon: const Icon(Icons.qr_code_scanner),
+                tooltip: isRtl ? 'مسح الباركود' : 'Scan Barcode',
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                onPressed: _lookupBarcode,
+                icon: const Icon(Icons.search),
+                tooltip: isRtl ? 'بحث عن باركود' : 'Lookup Barcode',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _note,
+            decoration: InputDecoration(
+              labelText: isRtl ? 'ملاحظات' : 'Notes',
+              prefixIcon: const Icon(Icons.note_alt_outlined),
+            ),
+            maxLines: 3,
+            textInputAction: TextInputAction.done,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButton<AppCurrency>(
+                  value: _currency,
+                  items: const [
+                    DropdownMenuItem(
+                      value: AppCurrency.sar,
+                      child: Text('SAR ﷼'),
+                    ),
+                    DropdownMenuItem(
+                      value: AppCurrency.usd,
+                      child: Text('USD \$'),
+                    ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() => _currency = v);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: _pickImage,
+                  icon: Icon(
+                    _imageUrl == null ? Icons.image : Icons.check_circle,
+                  ),
+                  label: Text(
+                    _imageUrl == null
+                        ? (isRtl ? 'إضافة صورة' : 'Add Image')
+                        : (isRtl ? 'تغيير الصورة' : 'Change Image'),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: _pickImageUrl,
+                icon: const Icon(Icons.link),
+                label: Text(isRtl ? 'رابط' : 'URL'),
+              ),
+              if (_imageUrl != null)
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() => _imageUrl = null),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPricesTab(BuildContext context, bool isRtl) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          StorePriceSelector(
+            selectedStores: _selectedStores,
+            allStores: _stores,
+            priceControllers: _storePriceControllers,
+            onStoreToggled: (Store store) {
+              setState(() {
+                if (_selectedStores.contains(store)) {
+                  _selectedStores.remove(store);
+                  _storePriceControllers.remove(store.id);
+                  _storePriceControllers[store.id]?.dispose();
+                } else {
+                  _selectedStores.add(store);
+                  _storePriceControllers.putIfAbsent(
+                    store.id!,
+                    () => TextEditingController(),
+                  );
+                }
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryTab(BuildContext context, bool isRtl) {
+    if (widget.item == null) {
+      return Center(
+        child: Text(isRtl
+            ? 'يجب حفظ المنتج أولاً لرؤية التاريخ'
+            : 'Must save item first to see history'),
+      );
+    }
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: PriceHistoryList(itemId: widget.item!.id!),
     );
   }
 }
