@@ -425,7 +425,12 @@ class _LlmSettingsScreenState extends State<LlmSettingsScreen> {
           controller: ctrl,
           autofocus: true,
           obscureText: !isUrl,
-          keyboardType: isUrl ? TextInputType.url : TextInputType.visiblePassword,
+          // SECURITY (Finding 8): Disable suggestions, autocorrect, and
+          // force visiblePassword keyboard type so cloud-synced IMEs (e.g.
+          // GBoard) do not buffer the typed key in their suggestion cache.
+          enableSuggestions: false,
+          autocorrect: false,
+          keyboardType: TextInputType.visiblePassword,
           decoration: InputDecoration(
             hintText: isUrl
                 ? 'http://localhost:11434'

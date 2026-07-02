@@ -83,7 +83,11 @@ class ScrapingProvider extends ChangeNotifier {
   LlmProvider _provider = LlmProvider.gemini;
   String _model = '';
   String _baseUrl = '';
-  String _searxngUrl = 'https://cachyos-nitro.tail3d23b7.ts.net:8080';
+  // SECURITY: Default is empty — the user MUST configure their own SearXNG
+  // instance in Settings. The previous default pointed at a personal
+  // Tailscale hostname which leaked every barcode lookup to the maintainer's
+  // private network. See audit Finding 1.
+  String _searxngUrl = '';
   bool _autoLoadOnDevice = false;
 
   // Cached presence flags — we never hold the actual keys in memory long-term.
@@ -101,6 +105,12 @@ class ScrapingProvider extends ChangeNotifier {
   String get searxngUrl => _searxngUrl;
   bool get autoLoadOnDevice => _autoLoadOnDevice;
 
+  /// True if the SearXNG server URL has been configured by the user.
+  /// Used by the UI to decide whether to show a "not configured" banner.
+  bool get isSearxngConfigured =>
+      _searxngUrl.isNotEmpty &&
+      Uri.tryParse(_searxngUrl)?.hasScheme == true;
+
   bool get hasGeminiKey => _hasGeminiKey;
   bool get hasOpenAiKey => _hasOpenAiKey;
   bool get hasGroqKey => _hasGroqKey;
@@ -110,7 +120,11 @@ class ScrapingProvider extends ChangeNotifier {
 
   /// True if the current config is ready to actually use the LLM.
   /// Used by the settings UI to show a green check / red warning.
+  ///
+  /// NOTE (Finding 1): SearXNG must also be configured for any strategy that
+  /// uses the schema parser, since the parser is fed by SearXNG results.
   bool get isConfigComplete {
+    if (!isSearxngConfigured && _strategy.usesSchema) return false;
     if (!_strategy.usesCloudLlm && !_strategy.usesOnDevice) return true;
     if (_strategy.usesCloudLlm) {
       switch (_provider) {
@@ -137,8 +151,17 @@ class ScrapingProvider extends ChangeNotifier {
     );
     _model      = sp.getString(_kLlmModel)   ?? '';
     _baseUrl    = sp.getString(_kLlmBaseUrl) ?? '';
-    _searxngUrl = sp.getString(_kSearxngUrl) ??
+    _searxngUrl = sp.getString(_kSearxngUrl) ?? '';
+
+    // SECURITY (Finding 1 migration): If a previous install saved the old
+    // maintainer's Tailscale hostname as the SearXNG URL, wipe it. The user
+    // will be prompted to configure their own instance on next launch.
+    const kBannedTailscaleHost =
         'https://cachyos-nitro.tail3d23b7.ts.net:8080';
+    if (_searxngUrl == kBannedTailscaleHost) {
+      _searxngUrl = '';
+      await sp.setString(_kSearxngUrl, '');
+    }
     _autoLoadOnDevice = sp.getBool(_kAutoLoadOnDev) ?? false;
 
     await _refreshKeyFlags();
@@ -180,6 +203,14 @@ class ScrapingProvider extends ChangeNotifier {
   }
 
   Future<void> setSearxngUrl(String v) async {
+    // SECURITY (Finding 11): Validate the URL before saving.
+    final parsed = Uri.tryParse(v);
+    if (v.isNotEmpty && (parsed == null ||
+        !parsed.hasScheme ||
+        (parsed.scheme != 'http' && parsed.scheme != 'https'))) {
+      throw ArgumentError('SearXNG URL must be a valid http(s) URL '
+          '(got: "$v")');
+    }
     _searxngUrl = v;
     final sp = await SharedPreferences.getInstance();
     await sp.setString(_kSearxngUrl, v);

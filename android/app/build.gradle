@@ -36,7 +36,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.example.bazaar"
+    namespace = "io.github.wissamza.bazaar"
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
@@ -48,7 +48,7 @@ android {
     kotlinOptions { jvmTarget = "17" }
 
     defaultConfig {
-        applicationId = "com.example.bazaar"
+        applicationId = "io.github.wissamza.bazaar"
         minSdkVersion = flutter.minSdkVersion           // covers ~97% of Android devices
         targetSdk = 37
         versionCode = flutterVersionCode.toInteger()

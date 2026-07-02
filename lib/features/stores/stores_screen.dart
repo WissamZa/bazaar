@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/database/dao/store_dao.dart';
 import '../../core/models/store.dart';
-import '../../core/providers/data_change_notifier.dart';
 import '../../core/providers/locale_provider.dart';
 import '../../widgets/empty_state.dart';
 import 'add_edit_store_screen.dart';
@@ -24,24 +23,10 @@ class _StoresScreenState extends State<StoresScreen> {
   void initState() {
     super.initState();
     _refresh();
-    DataChangeNotifier.instance.addListener(_onDataChanged);
-  }
-
-  @override
-  void dispose() {
-    DataChangeNotifier.instance.removeListener(_onDataChanged);
-    super.dispose();
-  }
-
-  void _onDataChanged() {
-    if (mounted) _refresh();
   }
 
   Future<void> _refresh() async {
     setState(() => _loading = true);
-    // Always ensure the Default store exists so the list is never empty —
-    // items saved without a selected store need somewhere to live.
-    await StoreDao.instance.getOrCreateDefault();
     _stores = await StoreDao.instance.all();
     if (!mounted) return;
     setState(() => _loading = false);
@@ -138,7 +123,6 @@ class _StoresScreenState extends State<StoresScreen> {
                           await StoreDao.instance.delete(store.id!);
                           _stores.removeAt(i);
                           setState(() {});
-                          DataChangeNotifier.instance.notify(tag: 'store-deleted');
                         },
                         child: Card(
                           child: ListTile(

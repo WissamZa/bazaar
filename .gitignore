@@ -8,7 +8,7 @@
 build/
 ephemeral/
 .melos/
-
+*.tar.gz
 # IntelliJ / Android Studio
 *.iml
 *.ipr

@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 
+import 'pinned_http_client.dart';
 import 'product_schema_parser.dart';
 import 'secrets.dart';
 
@@ -138,6 +141,10 @@ class LlmExtractor {
   }
 
   // ── Gemini via official SDK ─────────────────────────────────────────────
+  //
+  // QUALITY (Finding 10): The Gemini SDK does not expose a timeout parameter.
+  // We wrap the call with `.timeout()` so a hung Gemini request does not
+  // block the scraper chain forever.
   static Future<String> _runGemini(String prompt, {required String model}) async {
     final apiKey = await Secrets.instance.getGeminiKey();
     if (apiKey == null || apiKey.isEmpty) {
@@ -153,11 +160,23 @@ class LlmExtractor {
       ),
       systemInstruction: Content.text(_systemPrompt),
     );
-    final resp = await m.generateContent([Content.text(prompt)]);
-    return resp.text ?? '';
+    try {
+      final resp = await m
+          .generateContent([Content.text(prompt)])
+          .timeout(const Duration(seconds: 25));
+      return resp.text ?? '';
+    } on TimeoutException {
+      throw StateError('Gemini SDK call exceeded 25 seconds');
+    }
   }
 
   // ── OpenAI-compatible (OpenAI / Groq / Cerebras / Ollama) ───────────────
+  //
+  // SECURITY (Finding 4): Uses PinnedHttpClient so certificate-validation
+  // failures are logged (and would be enforced if pins were configured).
+  // QUALITY (Finding 10): Enforces a 30-second timeout on the HTTP call
+  // itself, AND a 35-second overall timeout on the Future so a hung
+  // connection does not block the scraper chain forever.
   static Future<String> _runOpenAiCompatible({
     required LlmProvider provider,
     required String prompt,
@@ -188,33 +207,43 @@ class LlmExtractor {
       throw StateError('${provider.label} API key not set');
     }
 
-    final res = await http.post(
-      Uri.parse('$baseUrl/chat/completions'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $apiKey',
-      },
-      body: jsonEncode({
-        'model': model,
-        'temperature': 0,
-        'max_tokens': 300,
-        'response_format': {'type': 'json_object'},
-        'messages': [
-          {'role': 'system', 'content': _systemPrompt},
-          {'role': 'user', 'content': prompt},
-        ],
-      }),
-    ).timeout(const Duration(seconds: 30));
+    // Wrap an IOClient around our pinned-cert-aware HttpClient.
+    final ioClient = PinnedHttpClient.create(timeout: const Duration(seconds: 30));
+    final client = IOClient(ioClient);
 
-    if (res.statusCode != 200) {
-      throw StateError('${provider.label} HTTP ${res.statusCode}');
+    try {
+      final res = await client
+          .post(
+            Uri.parse('$baseUrl/chat/completions'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $apiKey',
+            },
+            body: jsonEncode({
+              'model': model,
+              'temperature': 0,
+              'max_tokens': 300,
+              'response_format': {'type': 'json_object'},
+              'messages': [
+                {'role': 'system', 'content': _systemPrompt},
+                {'role': 'user', 'content': prompt},
+              ],
+            }),
+          )
+          .timeout(const Duration(seconds: 35));
+
+      if (res.statusCode != 200) {
+        throw StateError('${provider.label} HTTP ${res.statusCode}');
+      }
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final choices = data['choices'] as List?;
+      if (choices == null || choices.isEmpty) return '';
+      return (choices.first as Map<String, dynamic>)['message']['content']
+              as String? ??
+          '';
+    } finally {
+      client.close();
     }
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    final choices = data['choices'] as List?;
-    if (choices == null || choices.isEmpty) return '';
-    return (choices.first as Map<String, dynamic>)['message']['content']
-            as String? ??
-        '';
   }
 
   // ── Parse the LLM's JSON response ───────────────────────────────────────

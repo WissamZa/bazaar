@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -90,6 +92,11 @@ class OnDeviceLlm {
       url: 'https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct/resolve/main/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task',
       modelType: ModelType.gemmaIt,
       recommended: true,
+      // SECURITY (Finding 9): Expected SHA-256 of the .task file. Verified
+      // after download to detect CDN compromise or MITM. To regenerate:
+      //   curl -L <url> | sha256sum
+      // Leave empty to skip verification (NOT recommended for production).
+      expectedSha256: '',
     ),
     OnDeviceModel(
       id: 'qwen2.5-1.5b-instruct-q8',
@@ -97,6 +104,7 @@ class OnDeviceLlm {
       sizeMb: 1523,
       url: 'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task',
       modelType: ModelType.gemmaIt,
+      expectedSha256: '',
     ),
     OnDeviceModel(
       id: 'tinyllama-1.1b-chat-q8',
@@ -104,6 +112,7 @@ class OnDeviceLlm {
       sizeMb: 1095,
       url: 'https://huggingface.co/litert-community/TinyLlama-1.1B-Chat-v1.0/resolve/main/TinyLlama-1.1B-Chat-v1.0_multi-prefill-seq_q8_ekv1280.task',
       modelType: ModelType.gemmaIt,
+      expectedSha256: '',
     ),
     OnDeviceModel(
       id: 'phi-4-mini-instruct-q8',
@@ -111,6 +120,7 @@ class OnDeviceLlm {
       sizeMb: 3761,
       url: 'https://huggingface.co/litert-community/Phi-4-mini-instruct/resolve/main/Phi-4-mini-instruct_multi-prefill-seq_q8_ekv1280.task',
       modelType: ModelType.gemmaIt,
+      expectedSha256: '',
     ),
   ];
 
@@ -251,6 +261,29 @@ class OnDeviceLlm {
       );
     }
 
+    // SECURITY (Finding 9): If the preset specifies an expected SHA-256,
+    // verify the downloaded file matches. A mismatch indicates either
+    // corruption or a supply-chain compromise. We do NOT auto-delete the
+    // file on mismatch — the user might want to inspect it. Instead we
+    // refuse to register it with the LLM runtime.
+    if (m.expectedSha256.isNotEmpty) {
+      final actual = await _computeSha256(file);
+      if (actual.toLowerCase() != m.expectedSha256.toLowerCase()) {
+        try {
+          await file.delete();
+        } catch (_) {}
+        throw StateError(
+          'SHA-256 mismatch! Downloaded file hash does not match the '
+          'expected value.\n'
+          '  Expected: ${m.expectedSha256}\n'
+          '  Actual:   $actual\n'
+          'The file was deleted. This may indicate a corrupt download or '
+          'a compromised supply chain. If you trust the source, update '
+          'the expected hash in on_device_llm.dart.',
+        );
+      }
+    }
+
     await Secrets.instance.setOnDeviceModelPath(path);
     await Secrets.instance.setOnDeviceModelName(m.name);
     return path;
@@ -388,7 +421,39 @@ class OnDeviceLlm {
       return null;
     }
   }
+
+  /// Compute the SHA-256 of [file] as a lowercase hex string.
+  /// Used by [downloadModel] to verify the downloaded .task file matches
+  /// the expected hash (Finding 9).
+  ///
+  /// Reads the file in 1 MB chunks and feeds them to a streaming
+  /// `package:crypto` accumulator to avoid loading gigabyte-sized model
+  /// files into memory all at once.
+  static Future<String> _computeSha256(File file) async {
+    final raf = await file.open();
+    try {
+      final stream = _fileByteStream(raf, 1024 * 1024);
+      final digest = await crypto.sha256.bind(stream).last;
+      return digest.toString();
+    } finally {
+      await raf.close();
+    }
+  }
+
+  /// Stream chunks of [chunkSize] bytes from [raf] as `List<int>`.
+  static Stream<List<int>> _fileByteStream(
+    RandomAccessFile raf,
+    int chunkSize,
+  ) async* {
+    final buffer = Uint8List(chunkSize);
+    while (true) {
+      final n = await raf.readInto(buffer);
+      if (n == 0) break;
+      yield buffer.sublist(0, n);
+    }
+  }
 }
+
 
 /// Description of a downloadable on-device model.
 class OnDeviceModel {
@@ -398,6 +463,12 @@ class OnDeviceModel {
   final String url;
   final ModelType modelType;
   final bool recommended;
+
+  /// SECURITY (Finding 9): Expected SHA-256 of the downloaded .task file
+  /// (lowercase hex). Empty means verification is skipped (NOT recommended
+  /// for production — set this after first download to lock the supply chain).
+  final String expectedSha256;
+
   const OnDeviceModel({
     required this.id,
     required this.name,
@@ -405,5 +476,6 @@ class OnDeviceModel {
     required this.url,
     required this.modelType,
     this.recommended = false,
+    this.expectedSha256 = '',
   });
 }

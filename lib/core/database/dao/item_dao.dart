@@ -1,5 +1,4 @@
-import 'package:sqflite/sqflite.dart';
-
+// QUALITY (Finding 19): Removed duplicate `import 'package:sqflite/sqflite.dart';`
 import 'package:sqflite/sqflite.dart';
 
 import '../../models/item.dart';
@@ -11,34 +10,63 @@ class ItemDao {
 
   Future<Database> get _db => DatabaseHelper.instance.database;
 
+  /// Insert a new item. If a row with the same barcode already exists, the
+  /// insert is silently ignored — use [upsertByBarcode] for the update path.
+  ///
+  /// QUALITY (Finding 20): Previously this used `ConflictAlgorithm.replace`
+  /// which silently DELETEd the existing row and INSERTed a new one with a
+  /// new autoincrement id, breaking every FK reference (item_store,
+  /// list_items, item_price_history via cascade). `ignore` is safer: the
+  /// existing row is preserved.
   Future<int> insert(Item item) async {
     final db = await _db;
     return db.insert(
       'items',
       item.toDb(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
+      conflictAlgorithm: ConflictAlgorithm.ignore,
     );
   }
 
+  /// Upsert an item by barcode. If a row with the same barcode exists, all
+  /// its fields are updated in place (preserving the original id and
+  /// created_at). Otherwise a new row is inserted.
+  ///
+  /// QUALITY (Finding 20): Wrapped in a transaction to close the race window
+  /// between the findByBarcode check and the insert/update. Two concurrent
+  /// scans of the same barcode no longer risk a REPLACE that would cascade-
+  /// delete the existing item's price history.
   Future<int> upsertByBarcode(Item item) async {
     final db = await _db;
-    if (item.barcode != null && item.barcode!.isNotEmpty) {
-      final existing = await findByBarcode(item.barcode!);
-      if (existing != null) {
-        return db.update(
+    return db.transaction((txn) async {
+      if (item.barcode != null && item.barcode!.isNotEmpty) {
+        final rows = await txn.query(
           'items',
-          {
-            ...item.toDb(),
-            'id': existing.id,
-            'created_at': existing.createdAt.toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          },
-          where: 'id = ?',
-          whereArgs: [existing.id],
+          where: 'barcode = ?',
+          whereArgs: [item.barcode],
+          limit: 1,
         );
+        if (rows.isNotEmpty) {
+          final existing = Item.fromDb(rows.first);
+          return txn.update(
+            'items',
+            {
+              ...item.toDb(),
+              'id': existing.id,
+              'created_at': existing.createdAt.toIso8601String(),
+              'updated_at': DateTime.now().toIso8601String(),
+            },
+            where: 'id = ?',
+            whereArgs: [existing.id],
+          );
+        }
       }
-    }
-    return insert(item);
+      // No existing row with this barcode — insert (ignore on collision).
+      return txn.insert(
+        'items',
+        item.toDb(),
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    });
   }
 
   Future<int> update(Item item) async {
@@ -92,49 +120,5 @@ class ItemDao {
       orderBy: 'updated_at DESC',
     );
     return rows.map(Item.fromDb).toList();
-  }
-
-  /// Returns the "effective" price for an item — the price the user wants
-  /// shown in lists when there's no room to show all per-store prices.
-  ///
-  /// Resolution order:
-  ///   1. If `item.preferredStoreId` is set AND a corresponding item_store
-  ///      row exists with a non-null price → return that price.
-  ///   2. Otherwise, return the LOWEST non-null price across all stores
-  ///      that carry this item.
-  ///   3. If no store has a price → return null (the UI shows `⃁ 0.00`).
-  Future<double?> effectivePriceFor(Item item) async {
-    final db = await _db;
-    if (item.id == null) return item.price;
-
-    // 1. Preferred store's price.
-    if (item.preferredStoreId != null) {
-      final rows = await db.query(
-        'item_store',
-        where: 'item_id = ? AND store_id = ? AND price IS NOT NULL',
-        whereArgs: [item.id, item.preferredStoreId],
-        limit: 1,
-      );
-      if (rows.isNotEmpty) {
-        final p = (rows.first['price'] as num?)?.toDouble();
-        if (p != null) return p;
-      }
-    }
-
-    // 2. Lowest non-null price across all stores.
-    final rows = await db.query(
-      'item_store',
-      columns: ['MIN(price) AS min_price'],
-      where: 'item_id = ? AND price IS NOT NULL',
-      whereArgs: [item.id],
-    );
-    if (rows.isNotEmpty) {
-      final minPrice = (rows.first['min_price'] as num?)?.toDouble();
-      if (minPrice != null) return minPrice;
-    }
-
-    // 3. Fall back to the legacy item.price field (set by older app versions
-    //    before per-store prices were introduced).
-    return item.price;
   }
 }

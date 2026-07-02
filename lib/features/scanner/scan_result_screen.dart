@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../core/constants/currencies.dart';
 import '../../core/database/dao/item_dao.dart';
 import '../../core/models/item.dart';
-import '../../core/providers/data_change_notifier.dart';
 import '../../core/providers/locale_provider.dart';
 import '../../core/services/barcode_service.dart';
 import '../../core/services/scraper_service.dart';
@@ -76,8 +75,6 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
     if (saved.id != null) {
       await BarcodeService.instance.ensureDefaultStoreLink(saved);
     }
-    // Notify all list screens to refresh.
-    DataChangeNotifier.instance.notify(tag: 'item-saved-from-scan');
     if (!mounted) return;
     Navigator.of(context).pop(true);
   }

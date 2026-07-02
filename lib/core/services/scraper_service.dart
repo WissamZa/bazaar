@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:http/http.dart' as http;
 
 import '../providers/scraping_provider.dart';
@@ -209,7 +210,7 @@ class ScraperService {
   /// Specialized lookup for SearXNG that returns all results.
   Future<List<ScrapedProduct>> searchBarcodeSearXNGMulti(String barcode) async {
     final url = Uri.parse(
-      '${config?.searxngUrl ?? 'https://cachyos-nitro.tail3d23b7.ts.net:8080'}'
+      '${config?.searxngUrl ?? ''}'
       '/search?q=$barcode&format=json',
     );
     try {
@@ -291,8 +292,12 @@ class ScraperService {
     final strategy = strategyOverride ??
         config?.strategy ??
         ExtractionStrategy.schemaThenCloudLlm;
-    final searxngUrl =
-        config?.searxngUrl ?? 'https://cachyos-nitro.tail3d23b7.ts.net:8080';
+    final searxngUrl = config?.searxngUrl ?? '';
+    if (searxngUrl.isEmpty) {
+      _log('SearXNG URL not configured — skipping chain. '
+          'Configure it in Settings → Search & LLM.');
+      return offBase;
+    }
 
     // Two-pass query strategy: broad first, Saudi-focused second.
     final queries = <String>[
@@ -474,11 +479,15 @@ class ScraperService {
     return offBase;
   }
 
-  /// Debug logger — prints to stderr so it shows up in `flutter run` console
-  /// output. Disable by setting [ScraperService.debugLog] to false.
+  /// Debug logger — only emits in debug builds (kDebugMode).
+  ///
+  /// SECURITY (Finding 2): Previously this called print() unconditionally,
+  /// which leaked SearXNG queries, result titles, and pipeline errors to
+  /// Android logcat in release builds. Now gated behind kDebugMode so
+  /// release APKs are silent.
   static bool debugLog = true;
   static void _log(String msg) {
-    if (debugLog) {
+    if (debugLog && kDebugMode) {
       // ignore: avoid_print
       print('[scraper] $msg');
     }
@@ -521,8 +530,17 @@ class ScraperService {
     }
 
     // ── Step 2: SearXNG queries ──────────────────────────────────────────
-    final searxngUrl =
-        config?.searxngUrl ?? 'https://cachyos-nitro.tail3d23b7.ts.net:8080';
+    final searxngUrl = config?.searxngUrl ?? '';
+    if (searxngUrl.isEmpty) {
+      result.steps.add(PipelineDebugStep(
+        name: 'SearXNG',
+        status: PipelineStepStatus.failed,
+        duration: Duration.zero,
+        error: 'SearXNG URL is not configured. Open Settings → Search & LLM '
+            'to set it.',
+      ));
+      return result..finalProduct = result.offResult;
+    }
     final queries = <String>[
       barcode,
       '$barcode (site:.sa OR SAR OR "السعودية")',

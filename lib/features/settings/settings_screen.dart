@@ -168,7 +168,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _backup() async {
     setState(() => _busy = true);
     try {
-      final zip = await BackupService.instance.createBackup();
+      // SECURITY (Finding 5): Ask the user for an optional passphrase.
+      // If provided, the backup ZIP is encrypted with AES-256-GCM.
+      // If cancelled, the user wants a plain backup.
+      // If "skip" is tapped (empty passphrase), we proceed without encryption.
+      final passphrase = await _askForPassphrase(isRtl: context.read<LocaleProvider>().isRtl);
+      if (passphrase == null) {
+        // User cancelled the entire backup.
+        setState(() => _busy = false);
+        return;
+      }
+      final zip = await BackupService.instance.createBackup(
+        passphrase: passphrase.isEmpty ? null : passphrase,
+      );
       if (!mounted) return;
       // share_plus 12+ deprecates Share.shareXFiles in favor of
       // SharePlus.instance.share(ShareParams(...)). Using the new API.
@@ -186,17 +198,116 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Returns:
+  ///   null  = user cancelled the entire backup
+  ///   ""    = user wants a plaintext (unencrypted) backup
+  ///   "..." = user wants an encrypted backup with this passphrase
+  Future<String?> _askForPassphrase({required bool isRtl}) async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isRtl ? 'تأمين النسخة الاحتياطية' : 'Backup passphrase'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isRtl
+                  ? 'أدخل عبارة مرور لتشفير النسخة (اختياري). اتركها فارغة لنسخة غير مشفّرة.'
+                  : 'Enter a passphrase to encrypt the backup (optional). '
+                      'Leave empty for a plaintext backup.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              obscureText: true,
+              enableSuggestions: false,
+              autocorrect: false,
+              keyboardType: TextInputType.visiblePassword,
+              decoration: InputDecoration(
+                hintText: isRtl ? 'عبارة المرور' : 'Passphrase',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, ''),
+            child: Text(isRtl ? 'بدون تشفير' : 'No encryption'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            child: Text(isRtl ? 'تشفير' : 'Encrypt'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Prompt the user for the passphrase to decrypt an encrypted backup.
+  /// Returns null if the user cancels.
+  Future<String?> _askForRestorePassphrase({required bool isRtl}) async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isRtl ? 'فك تشفير النسخة' : 'Decrypt backup'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isRtl
+                  ? 'هذه النسخة محمية بعبارة مرور. أدخلها للاستعادة.'
+                  : 'This backup is encrypted. Enter the passphrase to restore it.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              obscureText: true,
+              enableSuggestions: false,
+              autocorrect: false,
+              keyboardType: TextInputType.visiblePassword,
+              decoration: InputDecoration(
+                hintText: isRtl ? 'عبارة المرور' : 'Passphrase',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            child: Text(isRtl ? 'فك التشفير' : 'Decrypt'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _restore() async {
     setState(() => _busy = true);
     try {
-      final contents = await BackupService.instance.pickAndRead();
+      final locale = context.read<LocaleProvider>();
+      final isRtl = locale.isRtl;
+      final contents = await BackupService.instance.pickAndRead(
+        passphrasePrompt: () => _askForRestorePassphrase(isRtl: isRtl),
+      );
       if (contents == null) {
         setState(() => _busy = false);
         return;
       }
       if (!mounted) return;
-      final locale = context.read<LocaleProvider>();
-      final isRtl = locale.isRtl;
       final restoreItems = ValueNotifier<bool>(true);
       final restoreStores = ValueNotifier<bool>(true);
       final restoreLists = ValueNotifier<bool>(true);
@@ -280,7 +391,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _snack(
         isRtl
             ? 'اكتملت الاستعادة: ${summary.items} منتج، ${summary.stores} متجر، ${summary.lists} قائمة'
-            : 'Restore complete: ${summary.items} items, ${summary.stores} stores, ${summary.lists} lists',
+                '${summary.skipped > 0 ? " (تم تخطّي ${summary.skipped})" : ""}'
+            : 'Restore complete: ${summary.items} items, ${summary.stores} stores, ${summary.lists} lists'
+                '${summary.skipped > 0 ? " (${summary.skipped} skipped)" : ""}',
       );
     } catch (e) {
       if (!mounted) return;

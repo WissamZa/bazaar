@@ -4,7 +4,6 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/database/dao/store_dao.dart';
 import '../../core/models/store.dart';
-import '../../core/providers/data_change_notifier.dart';
 import '../../core/providers/locale_provider.dart';
 
 class AddEditStoreScreen extends StatefulWidget {
@@ -117,7 +116,6 @@ class _AddEditStoreScreenState extends State<AddEditStoreScreen> {
     } else {
       await StoreDao.instance.update(store);
     }
-    DataChangeNotifier.instance.notify(tag: 'store-saved');
     if (!mounted) return;
     setState(() => _busy = false);
     Navigator.of(context).pop();
