@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bazaar — Architecture</title>
+<style>
+  @page { size: 1200px 700px; margin: 0; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 1200px; height: 700px;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #ffffff;
+    color: #22211f;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .canvas {
+    width: 1200px; height: 700px;
+    padding: 40px 60px;
+    box-sizing: border-box;
+    position: relative;
+  }
+  h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #5e553c;
+    margin: 0 0 6px;
+  }
+  .sub {
+    font-size: 13px;
+    color: #8c8a83;
+    margin: 0 0 32px;
+  }
+
+  .layer {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 20px;
+    margin-bottom: 18px;
+  }
+  .layer-label {
+    text-align: right;
+    font-size: 11px;
+    font-weight: 700;
+    color: #8a7227;
+    text-transform: uppercase;
+    letter-spacing: 1.4px;
+    padding-top: 18px;
+  }
+  .layer-label .desc {
+    font-size: 10px;
+    color: #8c8a83;
+    font-weight: 400;
+    margin-top: 4px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .row { display: flex; gap: 12px; }
+  .box {
+    flex: 1;
+    background: #f5f5f4;
+    border: 1.5px solid #d2ccbc;
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .box .name {
+    font-size: 13px; font-weight: 700; color: #22211f;
+  }
+  .box .tech {
+    font-size: 10px; color: #8c8a83;
+    margin-top: 3px;
+    font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  }
+  .box.accent {
+    background: rgba(138,114,39,0.06);
+    border-color: #8a7227;
+  }
+  .box.accent .name { color: #5e553c; }
+
+  /* Arrows between layers */
+  .arrow {
+    text-align: center;
+    color: #d2ccbc;
+    font-size: 18px;
+    margin: -8px 0 -8px 220px;
+    line-height: 1;
+  }
+
+  /* Pipeline diagram (right side, bottom) */
+  .pipeline {
+    margin-top: 30px;
+    background: #fafaf8;
+    border: 1.5px dashed #d2ccbc;
+    border-radius: 14px;
+    padding: 18px 20px;
+  }
+  .pipeline-title {
+    font-size: 12px; font-weight: 700; color: #5e553c;
+    text-transform: uppercase; letter-spacing: 1.2px;
+    margin-bottom: 12px;
+  }
+  .pipeline-flow {
+    display: flex; align-items: center; gap: 8px;
+    justify-content: center;
+  }
+  .tier {
+    padding: 10px 14px;
+    background: #ffffff;
+    border: 1.5px solid #d2ccbc;
+    border-radius: 8px;
+    text-align: center;
+    flex: 1;
+    max-width: 180px;
+  }
+  .tier .tname { font-size: 12px; font-weight: 700; color: #22211f; }
+  .tier .tdesc { font-size: 10px; color: #8c8a83; margin-top: 2px; }
+  .tier.t0 { border-color: #459d62; }
+  .tier.t0 .tname { color: #459d62; }
+  .tier.t1 { border-color: #4b759f; }
+  .tier.t1 .tname { color: #4b759f; }
+  .tier.t2 { border-color: #8a7227; }
+  .tier.t2 .tname { color: #8a7227; }
+  .tier.t3 { border-color: #5e3bc8; }
+  .tier.t3 .tname { color: #5e3bc8; }
+  .arrow-h { color: #d2ccbc; font-size: 18px; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <h2>Bazaar — Architecture at a glance</h2>
+  <div class="sub">Local-first single-binary Flutter app. No server. No account. No telemetry.</div>
+
+  <div class="layer">
+    <div class="layer-label">UI Layer<div class="desc">features/*</div></div>
+    <div class="row">
+      <div class="box"><div class="name">Home / Analytics</div><div class="tech">home_screen.dart</div></div>
+      <div class="box"><div class="name">Items</div><div class="tech">items/*.dart</div></div>
+      <div class="box"><div class="name">Shopping Lists</div><div class="tech">shopping_lists/*.dart</div></div>
+      <div class="box"><div class="name">Scanner</div><div class="tech">scanner/*.dart</div></div>
+      <div class="box"><div class="name">Settings</div><div class="tech">settings/*.dart</div></div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="layer">
+    <div class="layer-label">State Layer<div class="desc">core/providers/*</div></div>
+    <div class="row">
+      <div class="box accent"><div class="name">ThemeProvider</div><div class="tech">light / dark / system</div></div>
+      <div class="box accent"><div class="name">LocaleProvider</div><div class="tech">en / ar · RTL</div></div>
+      <div class="box accent"><div class="name">CurrencyProvider</div><div class="tech">SAR / USD</div></div>
+      <div class="box accent"><div class="name">ScrapingProvider</div><div class="tech">strategy · API keys</div></div>
+      <div class="box accent"><div class="name">UserProvider</div><div class="tech">local username</div></div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="layer">
+    <div class="layer-label">Service Layer<div class="desc">core/services/*</div></div>
+    <div class="row">
+      <div class="box"><div class="name">ScraperService</div><div class="tech">4-tier lookup chain</div></div>
+      <div class="box"><div class="name">BarcodeService</div><div class="tech">local + online</div></div>
+      <div class="box"><div class="name">BackupService</div><div class="tech">AES-256-GCM ZIP</div></div>
+      <div class="box"><div class="name">ShareService</div><div class="tech">JSON export / import</div></div>
+      <div class="box"><div class="name">Secrets</div><div class="tech">Keystore / Keychain</div></div>
+    </div>
+  </div>
+
+  <div class="arrow">↓</div>
+
+  <div class="layer">
+    <div class="layer-label">Data Layer<div class="desc">core/database/*</div></div>
+    <div class="row">
+      <div class="box"><div class="name">DatabaseHelper</div><div class="tech">sqflite · v6 schema</div></div>
+      <div class="box"><div class="name">ItemDao · StoreDao</div><div class="tech">CRUD + upsert</div></div>
+      <div class="box"><div class="name">ListItemDao</div><div class="tech">JOIN queries</div></div>
+      <div class="box"><div class="name">ItemStoreDao</div><div class="tech">M2M + price history</div></div>
+      <div class="box"><div class="name">SharedPreferences</div><div class="tech">user prefs</div></div>
+    </div>
+  </div>
+
+  <div class="pipeline">
+    <div class="pipeline-title">Barcode lookup pipeline — 4-tier fallback chain</div>
+    <div class="pipeline-flow">
+      <div class="tier t0"><div class="tname">Tier 0</div><div class="tdesc">Open Food Facts<br>JSON API · name only</div></div>
+      <span class="arrow-h">→</span>
+      <div class="tier t1"><div class="tname">Tier 1</div><div class="tdesc">SearXNG + schema<br>JSON-LD / OG parser</div></div>
+      <span class="arrow-h">→</span>
+      <div class="tier t2"><div class="tname">Tier 2</div><div class="tdesc">Cloud LLM<br>Gemini / OpenAI / Groq</div></div>
+      <span class="arrow-h">→</span>
+      <div class="tier t3"><div class="tname">Tier 3</div><div class="tdesc">On-device LLM<br>Gemma / Qwen / Llama</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

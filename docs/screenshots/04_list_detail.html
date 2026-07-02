@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bazaar — List Detail</title>
+<style>
+  :root {
+    --bg: #f5f5f4;
+    --surface: #ffffff;
+    --primary: #5e553c;
+    --accent: #8a7227;
+    --text: #22211f;
+    --muted: #8c8a83;
+    --border: #d2ccbc;
+    --success: #459d62;
+    --checkbox-checked: var(--primary);
+  }
+  @page { size: 393px 852px; margin: 0; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 393px; height: 852px;
+    font-family: 'Inter', -apple-system, sans-serif;
+    color: var(--text);
+    background: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .phone {
+    width: 393px; height: 852px;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .statusbar {
+    height: 44px;
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    font-size: 14px; font-weight: 600;
+  }
+  .appbar {
+    height: 56px;
+    background: var(--surface);
+    padding: 0 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .appbar .left, .appbar .right { font-size: 22px; color: var(--primary); display: flex; gap: 12px; }
+  .appbar .title { font-size: 18px; font-weight: 700; }
+
+  /* Summary bar */
+  .summary {
+    background: var(--primary);
+    color: #fff;
+    padding: 14px 16px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .summary .left { font-size: 12px; opacity: 0.85; }
+  .summary .left .num { font-size: 22px; font-weight: 800; opacity: 1; display: block; margin-top: 2px; }
+  .summary .right { text-align: right; }
+  .summary .right .label { font-size: 11px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px; }
+  .summary .right .total { font-size: 24px; font-weight: 800; }
+  .summary .right .total .cur { color: rgba(255,255,255,0.7); font-size: 14px; margin-right: 4px; }
+
+  .content {
+    flex: 1;
+    overflow: hidden;
+    padding: 8px 0;
+  }
+
+  .item-row {
+    background: var(--surface);
+    margin: 6px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    padding: 12px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .checkbox {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; color: #fff;
+  }
+  .checkbox.checked {
+    background: var(--checkbox-checked);
+    border-color: var(--checkbox-checked);
+  }
+  .item-info { flex: 1; min-width: 0; }
+  .item-name { font-size: 14px; font-weight: 600; }
+  .item-name.checked { text-decoration: line-through; color: var(--muted); }
+  .item-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .item-price {
+    font-size: 13px; font-weight: 700;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .item-price .cur { color: var(--accent); font-size: 10px; }
+  .item-price .qty { color: var(--muted); font-size: 11px; font-weight: 400; display: block; }
+
+  .fab {
+    position: absolute;
+    bottom: 24px; right: 18px;
+    width: 56px; height: 56px;
+    border-radius: 18px;
+    background: var(--primary);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px;
+    box-shadow: 0 6px 16px rgba(94,85,60,0.35);
+  }
+
+  /* Footer */
+  .footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 14px 16px 24px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .footer .label { font-size: 12px; color: var(--muted); }
+  .footer .checked-total { font-size: 18px; font-weight: 700; color: var(--success); }
+  .footer .checked-total .cur { color: var(--accent); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="statusbar"><span>9:41</span><span>📶 🔋 87%</span></div>
+  <div class="appbar">
+    <div class="left">←</div>
+    <div class="title">Weekly Groceries</div>
+    <div class="right">⋮</div>
+  </div>
+  <div class="summary">
+    <div class="left">
+      <span>Items</span>
+      <span class="num">14</span>
+    </div>
+    <div class="right">
+      <div class="label">List total</div>
+      <div class="total"><span class="cur">﷼</span> 247.50</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="item-row">
+      <div class="checkbox checked">✓</div>
+      <div class="item-info">
+        <div class="item-name checked">Almarai Fresh Milk 1L</div>
+        <div class="item-meta">Panda · barcode 6281007021234</div>
+      </div>
+      <div class="item-price"><span class="cur">﷼</span> 6.75<span class="qty">×2 = 13.50</span></div>
+    </div>
+    <div class="item-row">
+      <div class="checkbox checked">✓</div>
+      <div class="item-info">
+        <div class="item-name checked">Lusosan Wheat Bread 700g</div>
+        <div class="item-meta">Carrefour · barcode 6281007034567</div>
+      </div>
+      <div class="item-price"><span class="cur">﷼</span> 4.50</div>
+    </div>
+    <div class="item-row">
+      <div class="checkbox"></div>
+      <div class="item-info">
+        <div class="item-name">Al-Othaim Eggs 30pk</div>
+        <div class="item-meta">Tamimi · barcode 6281007047890</div>
+      </div>
+      <div class="item-price"><span class="cur">﷼</span> 18.25</div>
+    </div>
+    <div class="item-row">
+      <div class="checkbox"></div>
+      <div class="item-info">
+        <div class="item-name">Abu Kass Rice 5kg</div>
+        <div class="item-meta">Panda · barcode 6281007051234</div>
+      </div>
+      <div class="item-price"><span class="cur">﷼</span> 42.00</div>
+    </div>
+    <div class="item-row">
+      <div class="checkbox"></div>
+      <div class="item-info">
+        <div class="item-name">Al-Wazir Olive Oil 1L</div>
+        <div class="item-meta">Carrefour · barcode 6281007065678</div>
+      </div>
+      <div class="item-price"><span class="cur">﷼</span> 35.50</div>
+    </div>
+    <div class="item-row">
+      <div class="checkbox"></div>
+      <div class="item-info">
+        <div class="item-name">Galaxy Chocolate 40g</div>
+        <div class="item-meta">Panda · barcode 6281007079012</div>
+      </div>
+      <div class="item-price"><span class="cur">﷼</span> 1.75<span class="qty">×4 = 7.00</span></div>
+    </div>
+    <div class="item-row">
+      <div class="checkbox"></div>
+      <div class="item-info">
+        <div class="item-name">Alkhair Coffee 200g</div>
+        <div class="item-meta">Tamimi · barcode 6281007083456</div>
+      </div>
+      <div class="item-price"><span class="cur">﷼</span> 14.50</div>
+    </div>
+  </div>
+  <div class="fab">+</div>
+  <div class="footer">
+    <div class="label">Checked total (2 of 14)</div>
+    <div class="checked-total"><span class="cur">﷼</span> 18.00</div>
+  </div>
+</div>
+</body>
+</html>

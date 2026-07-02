@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bazaar — Hero Banner</title>
+<style>
+  @page { size: 1200px 600px; margin: 0; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 1200px; height: 600px;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #0b0b0a;
+    color: #eeeeed;
+    overflow: hidden;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .hero {
+    width: 1200px; height: 600px;
+    position: relative;
+    background:
+      radial-gradient(ellipse at 80% 20%, rgba(214,184,93,0.15) 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 80%, rgba(61,163,197,0.10) 0%, transparent 50%),
+      #0b0b0a;
+    display: flex;
+    align-items: center;
+    padding: 0 80px;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(214,184,93,0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(214,184,93,0.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  .left {
+    width: 580px;
+    z-index: 2;
+    position: relative;
+  }
+  .badge {
+    display: inline-block;
+    padding: 6px 14px;
+    border: 1px solid rgba(214,184,93,0.4);
+    border-radius: 20px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: rgba(214,184,93,0.85);
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  h1 {
+    font-size: 76px;
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: -2px;
+    margin: 0 0 16px;
+    color: #eeeeed;
+  }
+  h1 .accent { color: #d6b85d; }
+  .tagline {
+    font-size: 20px;
+    font-weight: 300;
+    line-height: 1.5;
+    color: rgba(238,238,237,0.7);
+    margin: 0 0 28px;
+  }
+  .features {
+    display: flex; gap: 14px; flex-wrap: wrap;
+  }
+  .feature {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px;
+    color: rgba(238,238,237,0.85);
+    padding: 6px 10px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 8px;
+    border: 1px solid rgba(214,184,93,0.15);
+  }
+  .feature .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #d6b85d;
+  }
+
+  .right {
+    flex: 1;
+    height: 100%;
+    position: relative;
+    z-index: 1;
+  }
+  .phone-mock {
+    position: absolute;
+    width: 240px; height: 510px;
+    border-radius: 32px;
+    background: #1a1815;
+    border: 4px solid #2a2823;
+    overflow: hidden;
+    box-shadow:
+      0 30px 60px rgba(0,0,0,0.5),
+      0 0 0 1px rgba(214,184,93,0.1);
+    display: flex; flex-direction: column;
+  }
+  .phone-mock .notch {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    width: 80px; height: 18px; border-radius: 12px;
+    background: #0b0b0a;
+    z-index: 10;
+  }
+  .phone-mock .screen {
+    flex: 1;
+    background: #f5f5f4;
+    overflow: hidden;
+    margin-top: 0;
+    display: flex; flex-direction: column;
+  }
+  .phone-mock .statusbar {
+    height: 32px; padding: 0 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 10px; font-weight: 700;
+    background: #ffffff;
+    color: #22211f;
+    padding-top: 12px;
+  }
+  .phone-mock .appbar {
+    height: 36px; padding: 0 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: #ffffff;
+    border-bottom: 1px solid #d2ccbc;
+    font-size: 12px; font-weight: 700;
+    color: #22211f;
+  }
+  .phone-mock .body { flex: 1; padding: 10px; overflow: hidden; }
+  .phone-mock .kpi { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-bottom: 10px; }
+  .phone-mock .kpi-card {
+    background: #ffffff; border-radius: 6px; border: 1px solid #d2ccbc;
+    padding: 6px 4px; text-align: center;
+  }
+  .phone-mock .kpi-num { font-size: 14px; font-weight: 800; color: #5e553c; }
+  .phone-mock .kpi-label { font-size: 6px; color: #8c8a83; text-transform: uppercase; }
+  .phone-mock .list-card {
+    background: #ffffff; border-radius: 6px; border: 1px solid #d2ccbc;
+    padding: 7px 8px; margin-bottom: 4px;
+  }
+  .phone-mock .lc-name { font-size: 9px; font-weight: 600; color: #22211f; }
+  .phone-mock .lc-meta { font-size: 7px; color: #8c8a83; margin-top: 1px; display: flex; justify-content: space-between; }
+  .phone-mock .lc-meta .total { color: #459d62; font-weight: 700; }
+
+  .phone-mock.dark .screen { background: #1a1815; }
+  .phone-mock.dark .statusbar, .phone-mock.dark .appbar { background: #25221d; color: #eeeeed; border-bottom-color: #3d3a30; }
+  .phone-mock.dark .kpi-card, .phone-mock.dark .list-card { background: #25221d; border-color: #3d3a30; }
+  .phone-mock.dark .lc-name { color: #eeeeed; }
+  .phone-mock.dark .lc-meta { color: #908e87; }
+  .phone-mock.dark .kpi-num { color: #d6b85d; }
+
+  .p1 { top: 40px; right: 60px; transform: rotate(-4deg); }
+  .p2 { top: 20px; right: 220px; transform: rotate(2deg); z-index: 2; }
+  .p3 { top: 60px; right: 380px; transform: rotate(6deg); }
+
+  .corner {
+    position: absolute;
+    width: 30px; height: 30px;
+    border-color: rgba(214,184,93,0.5);
+    border-style: solid;
+    border-width: 0;
+  }
+  .corner.tl { top: 24px; left: 24px; border-top-width: 2px; border-left-width: 2px; }
+  .corner.tr { top: 24px; right: 24px; border-top-width: 2px; border-right-width: 2px; }
+  .corner.bl { bottom: 24px; left: 24px; border-bottom-width: 2px; border-left-width: 2px; }
+  .corner.br { bottom: 24px; right: 24px; border-bottom-width: 2px; border-right-width: 2px; }
+
+  .footer-text {
+    position: absolute;
+    bottom: 30px; left: 80px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: rgba(238,238,237,0.4);
+    z-index: 2;
+  }
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+
+  <div class="left">
+    <div class="badge">·  LOCAL-FIRST  ·  FLUTTER  ·  OPEN SOURCE  ·</div>
+    <h1>Bazaar.<br><span class="accent">Your market,</span><br>your data.</h1>
+    <div class="tagline">A 100% local shopping list app — scan a barcode, track prices across stores, and never hand your data to a server.</div>
+    <div class="features">
+      <div class="feature"><span class="dot"></span>Barcode scanning</div>
+      <div class="feature"><span class="dot"></span>Multi-store prices</div>
+      <div class="feature"><span class="dot"></span>AR / EN / RTL</div>
+      <div class="feature"><span class="dot"></span>On-device LLM</div>
+      <div class="feature"><span class="dot"></span>Encrypted backup</div>
+    </div>
+  </div>
+
+  <div class="right">
+    <!-- Phone 1 (light, home) -->
+    <div class="phone-mock p1">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span>📶 🔋</span></div>
+        <div class="appbar"><span>Bazaar</span><span>⚙</span></div>
+        <div class="body">
+          <div style="font-size:7px;color:#8c8a83;">Good morning,</div>
+          <div style="font-size:13px;font-weight:800;color:#22211f;margin-bottom:8px;">Wissam 👋</div>
+          <div class="kpi">
+            <div class="kpi-card"><div class="kpi-num">12</div><div class="kpi-label">Lists</div></div>
+            <div class="kpi-card"><div class="kpi-num">84</div><div class="kpi-label">Items</div></div>
+            <div class="kpi-card"><div class="kpi-num">7</div><div class="kpi-label">Stores</div></div>
+          </div>
+          <div class="list-card">
+            <div class="lc-name">Weekly Groceries</div>
+            <div class="lc-meta"><span>14 items</span><span class="total">﷼ 247.50</span></div>
+          </div>
+          <div class="list-card">
+            <div class="lc-name">Eid Preparation</div>
+            <div class="lc-meta"><span>22 items</span><span class="total">﷼ 612.00</span></div>
+          </div>
+          <div class="list-card">
+            <div class="lc-name">Office Snacks</div>
+            <div class="lc-meta"><span>8 items</span><span class="total">﷼ 84.25</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phone 2 (dark, RTL Arabic home) -->
+    <div class="phone-mock dark p2">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span>📶 🔋</span></div>
+        <div class="appbar"><span>بازار</span><span>⚙</span></div>
+        <div class="body">
+          <div style="font-size:7px;color:#908e87;">صباح الخير،</div>
+          <div style="font-size:13px;font-weight:800;color:#eeeeed;margin-bottom:8px;">وسام 👋</div>
+          <div class="kpi">
+            <div class="kpi-card"><div class="kpi-num">12</div><div class="kpi-label">قائمة</div></div>
+            <div class="kpi-card"><div class="kpi-num">84</div><div class="kpi-label">منتج</div></div>
+            <div class="kpi-card"><div class="kpi-num">7</div><div class="kpi-label">متجر</div></div>
+          </div>
+          <div class="list-card">
+            <div class="lc-name">البقالة الأسبوعية</div>
+            <div class="lc-meta"><span>14 منتج</span><span class="total">﷼ 247.50</span></div>
+          </div>
+          <div class="list-card">
+            <div class="lc-name">تحضير العيد</div>
+            <div class="lc-meta"><span>22 منتج</span><span class="total">﷼ 612.00</span></div>
+          </div>
+          <div class="list-card">
+            <div class="lc-name">وجبات المكتب</div>
+            <div class="lc-meta"><span>8 منتج</span><span class="total">﷼ 84.25</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phone 3 (light, items list) -->
+    <div class="phone-mock p3">
+      <div class="notch"></div>
+      <div class="screen">
+        <div class="statusbar"><span>9:41</span><span>📶 🔋</span></div>
+        <div class="appbar"><span>Items</span><span>⋮</span></div>
+        <div class="body">
+          <div style="background:#fff;border:1px solid #d2ccbc;border-radius:6px;padding:6px;font-size:8px;color:#8c8a83;margin-bottom:8px;">🔍 Search 84 items…</div>
+          <div class="list-card" style="display:flex;align-items:center;gap:6px;">
+            <div style="width:24px;height:24px;border-radius:5px;background:linear-gradient(135deg,#f0e8c8,#d4c89a);display:flex;align-items:center;justify-content:center;font-size:14px;">🥛</div>
+            <div style="flex:1;">
+              <div class="lc-name">Almarai Fresh Milk 1L</div>
+              <div class="lc-meta"><span>3 stores</span><span style="color:#459d62;font-weight:700;">﷼ 6.75</span></div>
+            </div>
+          </div>
+          <div class="list-card" style="display:flex;align-items:center;gap:6px;">
+            <div style="width:24px;height:24px;border-radius:5px;background:linear-gradient(135deg,#f0e8c8,#d4c89a);display:flex;align-items:center;justify-content:center;font-size:14px;">🍞</div>
+            <div style="flex:1;">
+              <div class="lc-name">Lusosan Wheat Bread 700g</div>
+              <div class="lc-meta"><span>2 stores</span><span style="color:#459d62;font-weight:700;">﷼ 4.50</span></div>
+            </div>
+          </div>
+          <div class="list-card" style="display:flex;align-items:center;gap:6px;">
+            <div style="width:24px;height:24px;border-radius:5px;background:linear-gradient(135deg,#f0e8c8,#d4c89a);display:flex;align-items:center;justify-content:center;font-size:14px;">🥚</div>
+            <div style="flex:1;">
+              <div class="lc-name">Al-Othaim Eggs 30pk</div>
+              <div class="lc-meta"><span>4 stores</span><span style="color:#459d62;font-weight:700;">﷼ 18.25</span></div>
+            </div>
+          </div>
+          <div class="list-card" style="display:flex;align-items:center;gap:6px;">
+            <div style="width:24px;height:24px;border-radius:5px;background:linear-gradient(135deg,#f0e8c8,#d4c89a);display:flex;align-items:center;justify-content:center;font-size:14px;">🍚</div>
+            <div style="flex:1;">
+              <div class="lc-name">Abu Kass Rice 5kg</div>
+              <div class="lc-meta"><span>5 stores</span><span style="color:#459d62;font-weight:700;">﷼ 42.00</span></div>
+            </div>
+          </div>
+          <div class="list-card" style="display:flex;align-items:center;gap:6px;">
+            <div style="width:24px;height:24px;border-radius:5px;background:linear-gradient(135deg,#f0e8c8,#d4c89a);display:flex;align-items:center;justify-content:center;font-size:14px;">🫒</div>
+            <div style="flex:1;">
+              <div class="lc-name">Al-Wazir Olive Oil 1L</div>
+              <div class="lc-meta"><span>3 stores</span><span style="color:#459d62;font-weight:700;">﷼ 35.50</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-text">github.com / wissamza / bazaar   ·   v1.4.0   ·   MIT</div>
+</div>
+</body>
+</html>

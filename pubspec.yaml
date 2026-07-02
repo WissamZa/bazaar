@@ -1,7 +1,7 @@
 name: bazaar
 description: A local-first Flutter shopping list app with barcode scanning, multi-store price tracking, AR/EN i18n, and ZIP backup.
 publish_to: "none"
-version: 1.4.0+7
+version: 1.4.4+7
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

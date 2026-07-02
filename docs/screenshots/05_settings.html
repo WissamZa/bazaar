@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bazaar — Settings</title>
+<style>
+  :root {
+    --bg: #f5f5f4;
+    --surface: #ffffff;
+    --primary: #5e553c;
+    --accent: #8a7227;
+    --text: #22211f;
+    --muted: #8c8a83;
+    --border: #d2ccbc;
+    --success: #459d62;
+    --error: #9c443c;
+  }
+  @page { size: 393px 852px; margin: 0; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 393px; height: 852px;
+    font-family: 'Inter', -apple-system, sans-serif;
+    color: var(--text);
+    background: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .phone {
+    width: 393px; height: 852px;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .statusbar {
+    height: 44px;
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    font-size: 14px; font-weight: 600;
+  }
+  .appbar {
+    height: 56px;
+    background: var(--surface);
+    padding: 0 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .appbar .left { font-size: 22px; color: var(--primary); }
+  .appbar .title { font-size: 22px; font-weight: 700; }
+
+  .content { flex: 1; overflow: hidden; padding: 0 0 12px; }
+
+  .section {
+    font-size: 11px; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 1.4px;
+    padding: 16px 16px 8px;
+  }
+
+  .group {
+    background: var(--surface);
+    margin: 0 16px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .row:last-child { border-bottom: none; }
+  .row .icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    color: var(--primary);
+  }
+  .row .label { flex: 1; min-width: 0; }
+  .row .label .primary { font-size: 14px; font-weight: 500; }
+  .row .label .secondary { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .row .right { color: var(--muted); font-size: 13px; }
+  .row .chevron { color: var(--muted); font-size: 18px; }
+
+  .banner {
+    margin: 8px 16px;
+    background: rgba(154, 68, 60, 0.08);
+    border: 1px solid rgba(154, 68, 60, 0.25);
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex; gap: 10px; align-items: center;
+    font-size: 12px;
+    color: var(--error);
+  }
+  .banner .icon { font-size: 18px; }
+
+  .danger {
+    color: var(--error) !important;
+  }
+  .danger .icon { color: var(--error) !important; background: rgba(154,68,60,0.08) !important; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="statusbar"><span>9:41</span><span>📶 🔋 87%</span></div>
+  <div class="appbar">
+    <div class="left">←</div>
+    <div class="title">Settings</div>
+    <div style="width: 22px;"></div>
+  </div>
+  <div class="content">
+    <div class="section">Search &amp; AI</div>
+    <div class="banner">
+      <span class="icon">⚠</span>
+      <span>SearXNG not configured. Tap to set up.</span>
+    </div>
+    <div class="group">
+      <div class="row">
+        <div class="icon">🧠</div>
+        <div class="label">
+          <div class="primary">Search &amp; LLM settings</div>
+          <div class="secondary">Incomplete — tap to configure</div>
+        </div>
+        <div class="chevron">›</div>
+      </div>
+      <div class="row">
+        <div class="icon">🏷</div>
+        <div class="label"><div class="primary">Item Categories</div></div>
+        <div class="chevron">›</div>
+      </div>
+    </div>
+
+    <div class="section">General</div>
+    <div class="group">
+      <div class="row">
+        <div class="icon">👤</div>
+        <div class="label">
+          <div class="primary">Username</div>
+          <div class="secondary">Wissam</div>
+        </div>
+        <div class="chevron">›</div>
+      </div>
+      <div class="row">
+        <div class="icon">🌐</div>
+        <div class="label"><div class="primary">Language</div></div>
+        <div class="right">English</div>
+        <div class="chevron">›</div>
+      </div>
+      <div class="row">
+        <div class="icon">🌙</div>
+        <div class="label"><div class="primary">Theme</div></div>
+        <div class="right">Dark</div>
+        <div class="chevron">›</div>
+      </div>
+      <div class="row">
+        <div class="icon">$</div>
+        <div class="label"><div class="primary">Currency</div></div>
+        <div class="right">Saudi Riyal (﷼)</div>
+        <div class="chevron">›</div>
+      </div>
+    </div>
+
+    <div class="section">Data Management</div>
+    <div class="group">
+      <div class="row">
+        <div class="icon">💾</div>
+        <div class="label">
+          <div class="primary">Backup</div>
+          <div class="secondary">Create an encrypted ZIP and share it</div>
+        </div>
+        <div class="chevron">›</div>
+      </div>
+      <div class="row">
+        <div class="icon">♻</div>
+        <div class="label">
+          <div class="primary">Restore</div>
+          <div class="secondary">Pick a ZIP file to restore from</div>
+        </div>
+        <div class="chevron">›</div>
+      </div>
+      <div class="row">
+        <div class="icon">📥</div>
+        <div class="label">
+          <div class="primary">Import JSON</div>
+          <div class="secondary">Import items / lists / stores</div>
+        </div>
+        <div class="chevron">›</div>
+      </div>
+    </div>
+
+    <div class="section">About</div>
+    <div class="group">
+      <div class="row">
+        <div class="icon">ℹ</div>
+        <div class="label"><div class="primary">Version</div></div>
+        <div class="right">1.4.0</div>
+      </div>
+      <div class="row">
+        <div class="icon">🔒</div>
+        <div class="label">
+          <div class="primary">Bazaar — fully local app</div>
+          <div class="secondary">No server, no account, full privacy</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
