@@ -245,11 +245,24 @@ class _ItemsScreenState extends State<ItemsScreen> {
         setState(() {});
       },
       child: ListTile(
+        leading: item.imageUrl != null && item.imageUrl!.isNotEmpty
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.network(
+                  item.imageUrl!,
+                  width: 48,
+                  height: 48,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      _placeholderIcon(),
+                ),
+              )
+            : _placeholderIcon(),
         title: Text(item.displayName(langCode)),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (item.brand != null)
+            if (item.brand != null && item.brand!.isNotEmpty)
               Text('${isRtl ? 'الماركة: ' : 'Brand: '}${item.brand}',
                   style: Theme.of(context).textTheme.bodySmall),
             if (item.barcode != null)
@@ -394,5 +407,24 @@ class _ItemsScreenState extends State<ItemsScreen> {
       ),
     );
     _refresh();
+  }
+
+  /// Square grey icon shown when an item has no image or the image fails
+  /// to load. Keeps the ListTile layout stable so the row doesn't shift
+  /// when images finish loading later.
+  Widget _placeholderIcon() {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Icon(
+        Icons.inventory_2_outlined,
+        size: 24,
+        color: Theme.of(context).colorScheme.outline,
+      ),
+    );
   }
 }

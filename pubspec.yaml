@@ -4,8 +4,10 @@ publish_to: "none"
 version: 1.3.8+6
 
 environment:
-  sdk: ">=3.3.0 <4.0.0"
-  flutter: ">=3.19.0"
+  sdk: ">=3.4.0 <4.0.0"
+  # Bumped from 3.19 to 3.44 because flutter_gemma 1.1.2 requires
+  # flutter >=3.44.0. share_plus 12 requires flutter >=3.22.0.
+  flutter: ">=3.44.0"
 
 dependencies:
   flutter:
@@ -37,13 +39,21 @@ dependencies:
 
   # ── NEW: Secure storage for API keys (Android Keystore / iOS Keychain) ──
   # v10+ pulls in flutter_secure_storage_linux 3.x which bundles a newer
-  # nlohmann/json.hpp that doesn't trip Clang's -Wdeprecated-literal-operator.
-  flutter_secure_storage: ^9.2.3
+  # nlohmann/json.hpp without the -Wdeprecated-literal-operator warning
+  # that breaks the Linux build on Clang 16+.
+  # API change: `AndroidOptions.encryptedSharedPreferences` was removed
+  # in v10 (encryption is now always on). secrets.dart was updated to
+  # not pass that field.
+  flutter_secure_storage: ^10.3.1
 
   # Share / Import-Export
+  # share_plus ^12.0.2 is required because flutter_gemma 1.1.2 transitively
+  # needs mime ^2.0.0 (via background_downloader), but share_plus 9.x only
+  # accepts mime ^1.0.4. share_plus 12+ accepts both mime ^1 and ^2.
   share_plus: ^12.0.2
   file_picker: ^8.0.0+1
-  path_provider: ^2.1.3
+  # Bumped from ^2.1.3 to ^2.1.4 to satisfy flutter_gemma's requirement.
+  path_provider: ^2.1.4
 
   # Backup
   archive: ^3.6.1

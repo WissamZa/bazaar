@@ -1,7 +1,11 @@
 import 'dart:async';
 
+import '../constants/currencies.dart';
 import '../database/dao/item_dao.dart';
+import '../database/dao/item_store_dao.dart';
+import '../database/dao/store_dao.dart';
 import '../models/item.dart';
+import '../models/item_store.dart';
 import 'scraper_service.dart';
 
 /// Orchestrates the three-step barcode flow:
@@ -43,6 +47,23 @@ class BarcodeService {
     }
     final online = await _scraper.searchBarcodeFromSource(code, source);
     return BarcodeLookup.online(code, online);
+  }
+
+  /// Ensure [item] (already saved) is linked to at least one store.
+  /// If it has no store links, link it to the Default store so it shows up
+  /// somewhere in the UI. Idempotent — safe to call after every save.
+  Future<void> ensureDefaultStoreLink(Item item) async {
+    if (item.id == null) return;
+    final links = await ItemStoreDao.instance.forItem(item.id!);
+    if (links.isNotEmpty) return;
+    final defaultStoreId = await StoreDao.instance.getOrCreateDefault();
+    await ItemStoreDao.instance.upsert(ItemStore(
+      itemId: item.id!,
+      storeId: defaultStoreId,
+      price: item.price,
+      currency: item.currency,
+      url: null,
+    ));
   }
 }
 

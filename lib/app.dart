@@ -11,6 +11,11 @@ import 'features/auth/username_screen.dart';
 import 'features/home_shell.dart';
 
 /// Root MaterialApp. Wires up theme, locale, RTL directionality, and routes.
+///
+/// NOTE: The Saudi Riyal SYMBOL is rendered as an SVG icon
+/// (`assets/icons/sar_symbol.svg`) by [CurrencyDisplay] — we don't need
+/// any custom font registration here because SVG renders identically on
+/// every platform.
 class BazaarApp extends StatelessWidget {
   const BazaarApp({super.key});
 
@@ -37,6 +42,16 @@ class BazaarApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) {
+        // Track the platform brightness so ThemeProvider.isDark resolves
+        // correctly when the user is on ThemeMode.system. We read it here
+        // (inside builder) because MediaQuery is only available below
+        // MaterialApp, not above it.
+        final brightness = MediaQuery.platformBrightnessOf(context);
+        // Defer the call to after the current build frame to avoid
+        // notifyListeners() during build.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          themeProv.updatePlatformBrightness(brightness);
+        });
         // Apply RTL/LTR at the root so every screen inherits it.
         return Directionality(
           textDirection: localeProv.textDirection,
@@ -77,7 +92,6 @@ class BazaarApp extends StatelessWidget {
 
     return base.copyWith(
       textTheme: GoogleFonts.notoSansTextTheme(base.textTheme).copyWith(
-        // Use NotoSansArabic for AR glyphs so the new ﷼ symbol renders.
         titleLarge: base.textTheme.titleLarge?.copyWith(
           fontWeight: FontWeight.bold,
         ),

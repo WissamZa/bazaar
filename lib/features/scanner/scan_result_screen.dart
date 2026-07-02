@@ -60,13 +60,21 @@ class _ScanResultScreenState extends State<ScanResultScreen> {
       barcode: widget.code,
       nameEn: product.name,
       nameAr: product.nameAr,
+      brand: product.brand,
       price: product.price,
       currency: CurrencyExtension.fromCode(product.currency),
       imageUrl: product.imageUrl,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
     );
-    await ItemDao.instance.upsertByBarcode(item);
+    final id = await ItemDao.instance.upsertByBarcode(item);
+    // Auto-link to the Default store so the item is never orphaned.
+    final saved = item.copyWith(
+        id: id == 0 ? null : id,
+        updatedAt: DateTime.now());
+    if (saved.id != null) {
+      await BarcodeService.instance.ensureDefaultStoreLink(saved);
+    }
     if (!mounted) return;
     Navigator.of(context).pop(true);
   }
