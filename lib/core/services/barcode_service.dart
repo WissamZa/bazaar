@@ -50,13 +50,28 @@ class BarcodeService {
   }
 
   /// Ensure [item] (already saved) is linked to at least one store.
-  /// If it has no store links, link it to the Default store so it shows up
-  /// somewhere in the UI. Idempotent — safe to call after every save.
+  ///
+  /// Behavior:
+  ///   1. ALWAYS creates the Default store if it doesn't exist (so the
+  ///      Stores screen is never empty, and items always have somewhere
+  ///      to live).
+  ///   2. If [item] already has at least one store link, do nothing else —
+  ///      the user has explicitly chosen where this item belongs.
+  ///   3. If [item] has NO store links, link it to the Default store so
+  ///      it's never orphaned.
+  ///
+  /// Idempotent — safe to call after every save.
   Future<void> ensureDefaultStoreLink(Item item) async {
+    // Always make sure the Default store exists. This is cheap (one SELECT
+    // by name; INSERT only if not found) and guarantees the Stores screen
+    // always has at least one entry.
+    final defaultStoreId = await StoreDao.instance.getOrCreateDefault();
+
     if (item.id == null) return;
     final links = await ItemStoreDao.instance.forItem(item.id!);
     if (links.isNotEmpty) return;
-    final defaultStoreId = await StoreDao.instance.getOrCreateDefault();
+
+    // No existing links — link to Default so the item shows up somewhere.
     await ItemStoreDao.instance.upsert(ItemStore(
       itemId: item.id!,
       storeId: defaultStoreId,

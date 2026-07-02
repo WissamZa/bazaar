@@ -11,6 +11,7 @@ import '../../core/models/category.dart';
 import '../../core/models/store.dart';
 import '../../core/models/item_store.dart';
 import '../../core/constants/currencies.dart';
+import '../../core/providers/data_change_notifier.dart';
 import '../../core/providers/locale_provider.dart';
 import '../../core/providers/scraping_provider.dart';
 import '../../core/services/barcode_service.dart';
@@ -43,6 +44,10 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   Category? _selectedCategory;
   List<Category> _categories = [];
   String? _imageUrl;
+  /// The store whose price should be shown as the item's "main" price.
+  /// Picked via a radio button next to each selected store in the
+  /// StorePriceSelector. May be null (means "use lowest available").
+  int? _preferredStoreId;
   bool _busy = false;
 
   @override
@@ -59,6 +64,7 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     _note = TextEditingController(text: i?.note ?? '');
     _currency = i?.currency ?? AppCurrency.sar;
     _imageUrl = i?.imageUrl;
+    _preferredStoreId = i?.preferredStoreId;
     _loadStores();
     _loadCategories();
   }
@@ -75,6 +81,9 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
   }
 
   Future<void> _loadStores() async {
+    // Ensure the Default store exists so the user can pick it explicitly
+    // if they want to (in addition to the auto-link-on-save behaviour).
+    await StoreDao.instance.getOrCreateDefault();
     _stores = await StoreDao.instance.all();
     _selectedStores = {};
     _storePriceControllers.clear();
@@ -487,6 +496,12 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       currency: _currency,
       imageUrl: _imageUrl,
       categoryId: _selectedCategory?.id,
+      // Only keep preferredStoreId if the store is still selected.
+      // Otherwise clear it so we don't reference a store link that doesn't exist.
+      preferredStoreId: (_preferredStoreId != null &&
+              _selectedStores.any((s) => s.id == _preferredStoreId))
+          ? _preferredStoreId
+          : null,
       createdAt: (itemId != null)
           ? (existing?.createdAt ??
               (await ItemDao.instance.findById(itemId) ??
@@ -506,8 +521,24 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       await ItemDao.instance.update(item);
     }
 
-    // 2. Update store relationships
-    await ItemStoreDao.instance.deleteByItemId(itemId);
+    // 2. Update store relationships — capture existing prices FIRST so the
+    //    DAO can compare against them and record price-change history.
+    //    The old flow did `deleteByItemId` then `upsert`, which meant the
+    //    DAO never found an "existing" record → no price-change history
+    //    was ever recorded. The new flow only deletes relations for stores
+    //    the user UNSELECTED, then upserts the kept/added ones.
+    final existingRelations =
+        await ItemStoreDao.instance.forItem(itemId);
+    final selectedStoreIds =
+        _selectedStores.map((s) => s.id!).toSet();
+    // Delete relations for stores that are no longer selected.
+    for (final rel in existingRelations) {
+      if (!selectedStoreIds.contains(rel.storeId)) {
+        await ItemStoreDao.instance.delete(rel.id!);
+      }
+    }
+    // Upsert the kept/added ones — the DAO will compare against the
+    // existing price and record a history entry if it changed.
     for (final store in _selectedStores) {
       final priceText = _storePriceControllers[store.id]?.text.trim() ?? '';
       final price = double.tryParse(priceText);
@@ -522,12 +553,19 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       );
     }
 
-    // 3. If no stores were selected, link to the Default store so the item
-    //    is never orphaned. (User can always remove it from there later.)
-    if (_selectedStores.isEmpty && itemId != null) {
+    // 3. ALWAYS ensure the Default store exists — even if the user deleted
+    //    every store between app start and this save. If no stores were
+    //    selected, also link this item to the Default store so it's never
+    //    orphaned. (User can remove the link later from the store detail
+    //    screen if they want.)
+    if (itemId != null) {
       final savedItem = item.copyWith(id: itemId, updatedAt: now);
       await BarcodeService.instance.ensureDefaultStoreLink(savedItem);
     }
+
+    // 4. Notify all list screens to refresh — they listen on
+    //    DataChangeNotifier so they don't depend on Navigator return values.
+    DataChangeNotifier.instance.notify(tag: 'item-saved');
 
     if (!mounted) return;
     setState(() => _busy = false);
@@ -715,12 +753,19 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
             selectedStores: _selectedStores,
             allStores: _stores,
             priceControllers: _storePriceControllers,
+            preferredStoreId: _preferredStoreId,
             onStoreToggled: (Store store) {
               setState(() {
                 if (_selectedStores.contains(store)) {
                   _selectedStores.remove(store);
                   _storePriceControllers.remove(store.id);
                   _storePriceControllers[store.id]?.dispose();
+                  // If the removed store was the preferred one, clear the
+                  // preference so we don't reference a store that's no longer
+                  // linked.
+                  if (_preferredStoreId == store.id) {
+                    _preferredStoreId = null;
+                  }
                 } else {
                   _selectedStores.add(store);
                   _storePriceControllers.putIfAbsent(
@@ -729,6 +774,9 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
                   );
                 }
               });
+            },
+            onPreferredStoreChanged: (int? storeId) {
+              setState(() => _preferredStoreId = storeId);
             },
           ),
         ],

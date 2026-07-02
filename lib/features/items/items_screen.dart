@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/database/dao/item_dao.dart';
 import '../../core/models/item.dart';
+import '../../core/providers/data_change_notifier.dart';
 import '../../core/providers/locale_provider.dart';
 import '../../widgets/currency_display.dart';
 import '../../widgets/empty_state.dart';
@@ -33,6 +34,11 @@ class ItemsScreen extends StatefulWidget {
 class _ItemsScreenState extends State<ItemsScreen> {
   final _searchCtrl = TextEditingController();
   List<Item> _items = [];
+  /// Effective price for each item, keyed by item.id. Populated by
+  /// `_refresh()` via `ItemDao.effectivePriceFor()` — preferred store's
+  /// price if set, otherwise the lowest non-null store price, otherwise
+  /// the legacy `item.price` field.
+  final Map<int, double?> _effectivePrices = {};
   bool _loading = true;
   String _query = '';
   SortOption _sortOption = SortOption.newest;
@@ -42,6 +48,22 @@ class _ItemsScreenState extends State<ItemsScreen> {
   void initState() {
     super.initState();
     _refresh();
+    // Listen for any data change (item added/edited/deleted, store link
+    // changed, price updated, etc.) and refresh the list when it happens.
+    // This catches both the FAB add-item flow (which doesn't go through
+    // _openAddEdit) and edits made from other screens.
+    DataChangeNotifier.instance.addListener(_onDataChanged);
+  }
+
+  @override
+  void dispose() {
+    DataChangeNotifier.instance.removeListener(_onDataChanged);
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onDataChanged() {
+    if (mounted) _refresh();
   }
 
   Future<void> _refresh({String? query}) async {
@@ -52,8 +74,25 @@ class _ItemsScreenState extends State<ItemsScreen> {
           ? await ItemDao.instance.all()
           : await ItemDao.instance.search(q);
 
-      // Apply sorting
+      // Fetch the effective price for each item (preferred store's price,
+      // else lowest, else legacy item.price). Done in parallel for speed.
+      _effectivePrices.clear();
+      final priceFutures = items
+          .where((i) => i.id != null)
+          .map((i) => ItemDao.instance
+              .effectivePriceFor(i)
+              .then((p) => MapEntry(i.id!, p)));
+      final priceEntries = await Future.wait(priceFutures);
+      for (final entry in priceEntries) {
+        _effectivePrices[entry.key] = entry.value;
+      }
+
+      // Apply sorting — use the effective price for price-based sorts so
+      // items are ordered by what the user actually sees, not by the
+      // legacy `item.price` field which is usually null.
       items = List.from(items);
+      double _priceOf(Item i) =>
+          i.id != null ? (_effectivePrices[i.id!] ?? i.price ?? 0) : (i.price ?? 0);
       switch (_sortOption) {
         case SortOption.newest:
           items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -62,10 +101,10 @@ class _ItemsScreenState extends State<ItemsScreen> {
           items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
           break;
         case SortOption.priceLowHigh:
-          items.sort((a, b) => (a.price ?? 0).compareTo(b.price ?? 0));
+          items.sort((a, b) => _priceOf(a).compareTo(_priceOf(b)));
           break;
         case SortOption.priceHighLow:
-          items.sort((a, b) => (b.price ?? 0).compareTo(a.price ?? 0));
+          items.sort((a, b) => _priceOf(b).compareTo(_priceOf(a)));
           break;
         case SortOption.nameAZ:
           items.sort(
@@ -243,6 +282,9 @@ class _ItemsScreenState extends State<ItemsScreen> {
         await ItemDao.instance.delete(item.id!);
         _items.removeWhere((it) => it.id == item.id);
         setState(() {});
+        // Notify other screens (Stores detail, Lists) that an item was
+        // deleted so their lists stay in sync.
+        DataChangeNotifier.instance.notify(tag: 'item-deleted');
       },
       child: ListTile(
         leading: item.imageUrl != null && item.imageUrl!.isNotEmpty
@@ -274,7 +316,14 @@ class _ItemsScreenState extends State<ItemsScreen> {
             ),
           ],
         ),
-        trailing: CurrencyDisplay(amount: item.price),
+        trailing: CurrencyDisplay(
+          // Use the effective price (preferred store's price, else lowest,
+          // else 0) — NOT item.price which is always null in the new
+          // per-store-pricing model.
+          amount: item.id != null
+              ? (_effectivePrices[item.id!] ?? item.price)
+              : item.price,
+        ),
         onTap: () => _openAddEdit(item: item),
       ),
     );

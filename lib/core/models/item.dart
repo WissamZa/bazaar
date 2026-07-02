@@ -15,6 +15,10 @@ class Item {
   final AppCurrency currency;
   final String? imageUrl;
   final int? categoryId;
+  /// The store whose price should be shown as the item's "main" price in
+  /// the items list. NULL means "no preference" — the UI falls back to the
+  /// lowest available store price.
+  final int? preferredStoreId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -29,6 +33,7 @@ class Item {
     this.currency = AppCurrency.sar,
     this.imageUrl,
     this.categoryId,
+    this.preferredStoreId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -44,6 +49,7 @@ class Item {
     AppCurrency? currency,
     String? imageUrl,
     int? categoryId,
+    int? preferredStoreId,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -58,10 +64,33 @@ class Item {
       currency: currency ?? this.currency,
       imageUrl: imageUrl ?? this.imageUrl,
       categoryId: categoryId ?? this.categoryId,
+      // Use the param if explicitly passed, otherwise keep existing.
+      // Note: copyWith can't distinguish "null was passed" from "not passed"
+      // with nullable types — so passing null here KEEPS the existing value.
+      // Use clearPreferredStoreId() to explicitly clear it.
+      preferredStoreId: preferredStoreId ?? this.preferredStoreId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  /// Returns a copy with preferredStoreId explicitly set to null.
+  /// (copyWith can't distinguish "null was passed" from "not passed".)
+  Item clearPreferredStoreId() => Item(
+        id: id,
+        barcode: barcode,
+        brand: brand,
+        nameEn: nameEn,
+        nameAr: nameAr,
+        note: note,
+        price: price,
+        currency: currency,
+        imageUrl: imageUrl,
+        categoryId: categoryId,
+        preferredStoreId: null,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+      );
 
   /// Returns the localised name for the active locale, falling back to the
   /// other language if the localised one is missing.
@@ -89,6 +118,7 @@ class Item {
         'currency': currency.code,
         'image_url': imageUrl,
         'category_id': categoryId,
+        'preferred_store_id': preferredStoreId,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };
@@ -107,6 +137,8 @@ class Item {
       ),
       imageUrl: json['image_url'] as String? ?? json['imageUrl'] as String?,
       categoryId: json['category_id'] as int?,
+      preferredStoreId: (json['preferred_store_id'] as num?)?.toInt() ??
+          (json['preferredStoreId'] as num?)?.toInt(),
       createdAt: DateTime.parse(
         (json['created_at'] as String?) ??
             json['createdAt'] as String? ??
@@ -134,6 +166,7 @@ class Item {
       ),
       imageUrl: row['image_url'] as String?,
       categoryId: row['category_id'] as int?,
+      preferredStoreId: (row['preferred_store_id'] as num?)?.toInt(),
       createdAt: DateTime.parse(row['created_at'] as String),
       updatedAt: DateTime.parse(row['updated_at'] as String),
     );
@@ -150,6 +183,7 @@ class Item {
         'currency': currency.code,
         'image_url': imageUrl,
         'category_id': categoryId,
+        'preferred_store_id': preferredStoreId,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/database/dao/shopping_list_dao.dart';
 import '../../core/models/shopping_list.dart';
+import '../../core/providers/data_change_notifier.dart';
 import '../../core/providers/locale_provider.dart';
 import '../../core/providers/user_provider.dart';
 
@@ -50,6 +51,7 @@ class _AddEditListScreenState extends State<AddEditListScreen> {
     } else {
       await ShoppingListDao.instance.update(list);
     }
+    DataChangeNotifier.instance.notify(tag: 'list-saved');
     if (!mounted) return;
     setState(() => _busy = false);
     Navigator.of(context).pop();

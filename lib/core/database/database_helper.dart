@@ -8,7 +8,7 @@ class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._();
 
   static const _dbName = 'bazaar.db';
-  static const _dbVersion = 6;
+  static const _dbVersion = 7;
 
   Database? _db;
 
@@ -79,6 +79,7 @@ class DatabaseHelper {
         currency   TEXT DEFAULT 'SAR',
         image_url  TEXT,
         category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+        preferred_store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -177,6 +178,14 @@ class DatabaseHelper {
       ''');
       await db.execute(
           'CREATE INDEX idx_price_history_store ON item_price_history(item_store_id)');
+    }
+    if (oldV < 7) {
+      // Add preferred_store_id column to items — lets the user pick which
+      // store's price should be shown as the item's "main" price in the
+      // items list. NULL means "no preference — use the lowest available
+      // store price".
+      await db.execute(
+          'ALTER TABLE items ADD COLUMN preferred_store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL;');
     }
   }
 

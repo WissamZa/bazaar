@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/database/dao/list_item_dao.dart';
 import '../../core/database/dao/shopping_list_dao.dart';
 import '../../core/models/shopping_list.dart';
+import '../../core/providers/data_change_notifier.dart';
 import '../../core/providers/locale_provider.dart';
 import '../../core/providers/user_provider.dart';
 import '../../widgets/empty_state.dart';
@@ -26,6 +27,17 @@ class _ListsScreenState extends State<ListsScreen> {
   void initState() {
     super.initState();
     _refresh();
+    DataChangeNotifier.instance.addListener(_onDataChanged);
+  }
+
+  @override
+  void dispose() {
+    DataChangeNotifier.instance.removeListener(_onDataChanged);
+    super.dispose();
+  }
+
+  void _onDataChanged() {
+    if (mounted) _refresh();
   }
 
   Future<void> _refresh() async {

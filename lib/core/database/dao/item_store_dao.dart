@@ -14,28 +14,31 @@ class ItemStoreDao {
   Future<int> upsert(ItemStore is_) async {
     final db = await _db;
 
-    // Record price history if the price has changed
+    // Look up the existing record (if any) so we can:
+    //   1. Preserve the existing `id` (so REPLACE doesn't allocate a new one
+    //      and orphan the price-history FK).
+    //   2. Compare prices and record a price-history entry when changed.
     final existing = await findByItemAndStore(is_.itemId, is_.storeId);
-    if (existing != null && existing.price != is_.price) {
-      await ItemPriceHistoryDao.instance.insert(
-        ItemPriceHistory(
-          itemStoreId: existing.id!,
-          price: existing.price ?? 0.0,
-          currency: existing.currency,
-          recordedAt: DateTime.now(),
-        ),
-      );
-    }
+
+    // Preserve the existing ID so REPLACE updates in place rather than
+    // delete+insert (which would orphan the price-history FK).
+    final toWrite = existing != null ? is_.copyWith(id: existing.id) : is_;
 
     final id = await db.insert(
       'item_store',
-      is_.toDb(),
+      toWrite.toDb(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
 
-    // If it was a new record, we might want to record the initial price too
+    // Record price history entries:
+    //   - If new record → record the initial price.
+    //   - If existing record AND price changed → record the OLD price
+    //     (as a "before" snapshot) AND the NEW price (as the "after").
+    //     The history table is append-only, so each entry is a point-in-time
+    //     observation. The most recent entry always reflects the current
+    //     price.
     if (existing == null) {
-      // We need to get the inserted ID
+      // Brand new — record the initial price.
       final rows = await db.query(
         'item_store',
         where: 'item_id = ? AND store_id = ?',
@@ -45,6 +48,27 @@ class ItemStoreDao {
       await ItemPriceHistoryDao.instance.insert(
         ItemPriceHistory(
           itemStoreId: insertedId,
+          price: is_.price ?? 0.0,
+          currency: is_.currency,
+          recordedAt: DateTime.now(),
+        ),
+      );
+    } else if (existing.price != is_.price) {
+      // Price changed — record BOTH the old price (as the "before") and
+      // the new price (as the "after"). Both reference the SAME item_store
+      // row (existing.id), so the history stays attached even though
+      // REPLACE may have rewritten the row.
+      await ItemPriceHistoryDao.instance.insert(
+        ItemPriceHistory(
+          itemStoreId: existing.id!,
+          price: existing.price ?? 0.0,
+          currency: existing.currency,
+          recordedAt: DateTime.now().subtract(const Duration(milliseconds: 1)),
+        ),
+      );
+      await ItemPriceHistoryDao.instance.insert(
+        ItemPriceHistory(
+          itemStoreId: existing.id!,
           price: is_.price ?? 0.0,
           currency: is_.currency,
           recordedAt: DateTime.now(),
