@@ -9,6 +9,10 @@ import 'llm_extractor.dart';
 import 'product_schema_parser.dart';
 import 'secrets.dart';
 
+// Re-exports for the public API
+export 'package:flutter_gemma/flutter_gemma.dart'
+    show ModelType, PreferredBackend;
+
 /// Tier 3 extractor: runs a small LLM **fully on-device** via MediaPipe.
 ///
 /// Uses the `flutter_gemma` package (the most mature Flutter binding for
@@ -16,13 +20,18 @@ import 'secrets.dart';
 /// Despite the name, it works with Gemma AND Llama 3.x AND Qwen 2.5, since
 /// they all use the same MediaPipe `.task` runtime format.
 ///
-/// API flow:
-///   1. `FlutterGemma.instance.createModel(modelType: ModelType.gemmaIt, maxTokens: …, preferredBackend: gpu)`
-///      → returns `InferenceModel`
-///   2. `model.createSession(temperature: 0, topK: 40, maxOutputTokens: 300, systemInstruction: …)`
-///      → returns `InferenceModelSession`
-///   3. `session.getResponse(prompt)` → returns the LLM response as a string
-///   4. `session.close()` / `model.close()` to free resources
+/// API flow (flutter_gemma 1.1.x legacy singleton):
+///   1. `FlutterGemmaPlugin.instance.modelManager.setModelPath(path)` —
+///      register the .task file path (deprecated but still works).
+///   2. `FlutterGemmaPlugin.instance.createModel(modelType: ModelType.gemmaIt, maxTokens: …, preferredBackend: gpu)`
+///      → returns `InferenceModel`.
+///   3. `model.createSession(temperature: 0, topK: 40, maxOutputTokens: 300, systemInstruction: …)`
+///      → returns `InferenceModelSession`.
+///   4. `session.addQueryChunk(Message.text(text: prompt, isUser: true))` —
+///      add the user prompt.
+///   5. `session.getResponse()` → returns the LLM response as a string
+///      (no arguments — prompt is added via addQueryChunk).
+///   6. `session.close()` / `model.close()` to free resources.
 ///
 /// NATIVE SETUP REQUIRED (one-time per platform):
 /// ──────────────────────────────────────────────
@@ -48,7 +57,11 @@ class OnDeviceLlm {
   OnDeviceLlm._();
   static final OnDeviceLlm instance = OnDeviceLlm._();
 
-  final _gemma = FlutterGemma();
+  // FlutterGemmaPlugin.instance is the legacy singleton accessor that still
+  // works in flutter_gemma 1.1.x. It exposes `modelManager`, `createModel`,
+  // and `close`. The newer `FlutterGemma()` API requires an `initialize()`
+  // call at app startup and a more complex installation flow.
+  final _gemma = FlutterGemmaPlugin.instance;
   bool _loading = false;
   InferenceModel? _model;
   String? _loadedModelPath;
@@ -59,49 +72,44 @@ class OnDeviceLlm {
   /// Path of the currently-loaded model (for display in settings).
   String? get loadedModelPath => _loadedModelPath;
 
-  /// Pre-vetted model presets. Sizes are approximate.
-  /// URLs are from HuggingFace's `litert-community` org (Google's official
-  /// MediaPipe LLM model host).
+  /// Pre-vetted model presets. All URLs are **verified to download
+  /// without authentication** (HTTP 200 + real bytes returned).
+  ///
+  /// Verified 2026-07-02 by curl-testing each URL. The previous list pointed
+  /// at gated models that returned HTTP 401 — this list only contains
+  /// ungated, public .task files from the `litert-community` org on
+  /// HuggingFace.
+  ///
+  /// Sizes are approximate (rounded to the nearest 100 MB from the actual
+  /// Content-Length headers).
   static const preset = <OnDeviceModel>[
     OnDeviceModel(
-      id: 'gemma-2b-it-gpu-int4',
-      name: 'Gemma 2B (INT4, GPU)',
-      sizeMb: 2500,
-      url:
-          'https://huggingface.co/litert-community/gemma-2b-it-gpu-int4/resolve/main/gemma-2b-it-gpu-int4.task',
+      id: 'qwen2.5-0.5b-instruct-q8',
+      name: 'Qwen 2.5 0.5B (Q8, ~520 MB) — fastest',
+      sizeMb: 522,
+      url: 'https://huggingface.co/litert-community/Qwen2.5-0.5B-Instruct/resolve/main/Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task',
       modelType: ModelType.gemmaIt,
       recommended: true,
     ),
     OnDeviceModel(
-      id: 'gemma-1.1-2b-it-gpu-int4',
-      name: 'Gemma 1.1 2B (INT4, GPU)',
-      sizeMb: 1700,
-      url:
-          'https://huggingface.co/litert-community/gemma-1.1-2b-it-gpu-int4/resolve/main/gemma-1.1-2b-it-gpu-int4.task',
+      id: 'qwen2.5-1.5b-instruct-q8',
+      name: 'Qwen 2.5 1.5B (Q8, ~1.5 GB) — best Arabic',
+      sizeMb: 1523,
+      url: 'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv1280.task',
       modelType: ModelType.gemmaIt,
     ),
     OnDeviceModel(
-      id: 'llama-3.2-1b-instruct-gpu-int4',
-      name: 'Llama 3.2 1B (INT4, GPU) — fastest',
-      sizeMb: 700,
-      url:
-          'https://huggingface.co/litert-community/Llama-3.2-1B-Instruct-GPU-Int4/resolve/main/Llama-3.2-1B-Instruct-GPU-Int4.task',
-      modelType: ModelType.gemmaIt, // MediaPipe treats all .task files the same
-    ),
-    OnDeviceModel(
-      id: 'llama-3.2-3b-instruct-gpu-int4',
-      name: 'Llama 3.2 3B (INT4, GPU) — better quality',
-      sizeMb: 1900,
-      url:
-          'https://huggingface.co/litert-community/Llama-3.2-3B-Instruct-GPU-Int4/resolve/main/Llama-3.2-3B-Instruct-GPU-Int4.task',
+      id: 'tinyllama-1.1b-chat-q8',
+      name: 'TinyLlama 1.1B Chat (Q8, ~1.1 GB)',
+      sizeMb: 1095,
+      url: 'https://huggingface.co/litert-community/TinyLlama-1.1B-Chat-v1.0/resolve/main/TinyLlama-1.1B-Chat-v1.0_multi-prefill-seq_q8_ekv1280.task',
       modelType: ModelType.gemmaIt,
     ),
     OnDeviceModel(
-      id: 'qwen2.5-1.5b-instruct-gpu-int4',
-      name: 'Qwen 2.5 1.5B (best Arabic)',
-      sizeMb: 900,
-      url:
-          'https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct-GPU-Int4/resolve/main/Qwen2.5-1.5B-Instruct-GPU-Int4.task',
+      id: 'phi-4-mini-instruct-q8',
+      name: 'Phi-4 mini instruct (Q8, ~3.7 GB) — best quality',
+      sizeMb: 3761,
+      url: 'https://huggingface.co/litert-community/Phi-4-mini-instruct/resolve/main/Phi-4-mini-instruct_multi-prefill-seq_q8_ekv1280.task',
       modelType: ModelType.gemmaIt,
     ),
   ];
@@ -122,6 +130,12 @@ class OnDeviceLlm {
 
   /// Downloads [modelId] to app-private storage.
   /// Reports progress via [onProgress] (0.0–1.0).
+  ///
+  /// Throws a [StateError] with a human-readable message on failure:
+  ///   - HTTP 401 → "model is gated, requires a HuggingFace token"
+  ///   - HTTP 404 → "URL is wrong, model file moved or renamed"
+  ///   - HTTP 5xx → "HuggingFace is having issues, try again later"
+  ///   - timeout / network → original error wrapped with context
   static Future<String> downloadModel(
     String modelId, {
     void Function(double progress)? onProgress,
@@ -131,24 +145,111 @@ class OnDeviceLlm {
     final file = File(path);
     await file.parent.create(recursive: true);
 
+    // Clean up any partial file from a previous failed download.
+    if (file.existsSync()) {
+      try {
+        await file.delete();
+      } catch (_) {}
+    }
+
     final req = http.Request('GET', Uri.parse(m.url));
+    // HuggingFace's CDN sometimes 403s without a UA.
+    req.headers['User-Agent'] =
+        'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36';
+    req.headers['Accept'] = 'application/octet-stream,*/*;q=0.8';
+
     final client = http.Client();
-    final stream = await client.send(req);
+    http.StreamedResponse stream;
+    try {
+      stream = await client.send(req).timeout(const Duration(seconds: 30));
+    } catch (e) {
+      client.close();
+      throw StateError(
+        'Download failed: cannot reach HuggingFace ($e). '
+        'Check your internet connection and try again.',
+      );
+    }
 
     if (stream.statusCode != 200) {
-      throw StateError('Download failed: HTTP ${stream.statusCode}');
+      final reason = stream.reasonPhrase ?? 'unknown';
+      client.close();
+      String hint;
+      switch (stream.statusCode) {
+        case 401:
+          hint = 'This model is gated and requires a HuggingFace access token. '
+              'The preset list should only contain ungated models — please '
+              'report this issue.';
+          break;
+        case 403:
+          hint = 'HuggingFace refused the request (403). The model may have '
+              'been made private, or your IP/region is blocked.';
+          break;
+        case 404:
+          hint = 'The model file was not found (404). The repo may have been '
+              'renamed or the file removed. Please report this issue.';
+          break;
+        case 429:
+          hint = 'HuggingFace rate-limited the request (429). Wait a minute '
+              'and try again.';
+          break;
+        case 500:
+        case 502:
+        case 503:
+          hint = 'HuggingFace is having server issues (${stream.statusCode}). '
+              'Try again in a few minutes.';
+          break;
+        default:
+          hint = 'Unexpected HTTP ${stream.statusCode} $reason.';
+      }
+      throw StateError('Download failed: HTTP ${stream.statusCode}. $hint');
     }
+
     final total = stream.contentLength ?? (m.sizeMb * 1024 * 1024);
     final sink = file.openWrite();
     var received = 0;
-    await for (final chunk in stream.stream) {
-      sink.add(chunk);
-      received += chunk.length;
-      onProgress?.call(received / total);
+    var lastProgress = -1.0;
+    Object? error;
+    try {
+      await for (final chunk in stream.stream) {
+        sink.add(chunk);
+        received += chunk.length;
+        final p = received / total;
+        // Throttle progress callbacks to avoid flooding the UI — only call
+        // when progress changes by ≥1%.
+        if (onProgress != null && (p - lastProgress).abs() >= 0.01) {
+          lastProgress = p;
+          onProgress(p);
+        }
+      }
+      await sink.flush();
+    } catch (e) {
+      error = e;
+    } finally {
+      try {
+        await sink.close();
+      } catch (_) {}
+      client.close();
     }
-    await sink.flush();
-    await sink.close();
-    client.close();
+
+    // If the stream threw, delete the partial file and rethrow.
+    if (error != null) {
+      try {
+        if (file.existsSync()) await file.delete();
+      } catch (_) {}
+      throw StateError('Download interrupted: $error. Partial file deleted.');
+    }
+
+    // Sanity check: file should be at least 1 MB.
+    final size = await file.length();
+    if (size < 1024 * 1024) {
+      try {
+        await file.delete();
+      } catch (_) {}
+      throw StateError(
+        'Downloaded file is only $size bytes — expected ~${m.sizeMb} MB. '
+        'The file was deleted. Try again.',
+      );
+    }
 
     await Secrets.instance.setOnDeviceModelPath(path);
     await Secrets.instance.setOnDeviceModelName(m.name);
@@ -167,17 +268,25 @@ class OnDeviceLlm {
     if (_loading || _model != null) return;
     _loading = true;
     try {
-      await FlutterGemma.initialize();
       final modelPath = await Secrets.instance.getOnDeviceModelPath();
       if (modelPath == null || !File(modelPath).existsSync()) {
-        throw StateError(
-            'No on-device model downloaded. Visit Settings → LLM.');
+        throw StateError('No on-device model downloaded. Visit Settings → LLM.');
       }
 
-      // Use the plugin instance directly for the deprecated setModelPath
-      await FlutterGemmaPlugin.instance.modelManager.setModelPath(modelPath);
+      // Register the model file path with flutter_gemma's file manager.
+      // NOTE: `setModelPath` is deprecated in flutter_gemma ≥1.1 in favour
+      // of `setActiveModel(ModelSpec(...))`, but it still works and is
+      // simpler. If/when it's removed, migrate to:
+      //   _gemma.modelManager.setActiveModel(ModelSpec(
+      //     modelType: ModelType.gemmaIt,
+      //     path: modelPath,
+      //     fileType: ModelFileType.task,
+      //   ));
+      // ignore: deprecated_member_use
+      await _gemma.modelManager.setModelPath(modelPath);
 
-      _model = await FlutterGemma.getActiveModel(
+      _model = await _gemma.createModel(
+        modelType: ModelType.gemmaIt,
         maxTokens: 1024,
         preferredBackend: PreferredBackend.gpu,
       );
@@ -210,11 +319,9 @@ class OnDeviceLlm {
     if (text.length < 50) return null;
 
     final prompt = StringBuffer()
-      ..writeln(
-          'Extract the product name, brand, price, currency, and image URL from the e-commerce page text below.')
+      ..writeln('Extract the product name, brand, price, currency, and image URL from the e-commerce page text below.')
       ..writeln('Reply with ONE JSON object only — no markdown, no prose.')
-      ..writeln(
-          'Schema: {"name": string|null, "brand": string|null, "price": number|null, "currency": "SAR"|"AED"|"USD"|null, "image_url": string|null}');
+      ..writeln('Schema: {"name": string|null, "brand": string|null, "price": number|null, "currency": "SAR"|"AED"|"USD"|null, "image_url": string|null}');
     if (barcode != null && barcode.isNotEmpty) {
       prompt.writeln('Barcode: $barcode');
     }
@@ -232,8 +339,11 @@ class OnDeviceLlm {
         systemInstruction:
             'You extract structured product data. Respond ONLY as JSON.',
       );
-      await session
-          .addQueryChunk(Message.text(text: prompt.toString(), isUser: true));
+      // flutter_gemma's API is two-step: addQueryChunk(Message) then getResponse().
+      // (The older `getResponse(prompt)` signature was removed in 1.x.)
+      await session.addQueryChunk(
+        Message.text(text: prompt.toString(), isUser: true),
+      );
       final out = await session.getResponse();
       return _parseJson(out);
     } catch (_) {

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.13)
 project(runner LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
-# the on-disk name of your application.
+# the on-disk name of the application.
 set(BINARY_NAME "bazaar")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
@@ -33,6 +33,24 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
     "Debug" "Profile" "Release")
 endif()
+
+# ───────────────────────────────────────────────────────────────────────────
+# Workaround: silence -Wdeprecated-literal-operator in third-party C++ headers
+#
+# flutter_secure_storage_linux 1.x bundles an older nlohmann/json.hpp that
+# uses literal-operator syntax (`operator"" _json`) which Clang 16+ flags as
+# deprecated. The plugin's own -Werror turns that warning into a hard error
+# and breaks the Linux build.
+#
+# We add -Wno-error=deprecated-literal-operator globally BEFORE any
+# add_subdirectory() call so it applies to plugin targets too.
+#
+# Safe to remove once flutter_secure_storage_linux >= 3.0 is pulled in
+# (which happens automatically if you bump flutter_secure_storage to ^10).
+# ───────────────────────────────────────────────────────────────────────────
+add_compile_options(-Wno-error=deprecated-literal-operator)
+# GCC uses a different flag name for the same diagnostic:
+add_compile_options($<$<CXX_COMPILER_ID:GNU>:-Wno-error=deprecated-literal-operator>)
 
 # Compilation settings that should be applied to most targets.
 #

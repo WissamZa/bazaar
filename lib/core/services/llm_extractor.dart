@@ -3,56 +3,57 @@ import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 
-import 'secrets.dart';
 import 'product_schema_parser.dart';
+import 'secrets.dart';
 
 /// Which cloud LLM provider to use for Tier 2 extraction.
 enum LlmProvider {
-  gemini, // Google Gemini — recommended, free tier 15 RPM
-  openai, // OpenAI-compatible (OpenAI, Azure, Together, OpenRouter…)
-  groq, // Groq — fastest latency, free tier 30 RPM
-  cerebras, // Cerebras — fastest inference, free beta
-  ollama, // local Ollama server on user's machine / Tailscale
+  gemini,    // Google Gemini — recommended, free tier 15 RPM
+  openai,    // OpenAI-compatible (OpenAI, Azure, Together, OpenRouter…)
+  groq,      // Groq — fastest latency, free tier 30 RPM
+  cerebras,  // Cerebras — fastest inference, free beta
+  ollama,    // local Ollama server on user's machine / Tailscale
 }
 
 extension LlmProviderX on LlmProvider {
   String get label => switch (this) {
-        LlmProvider.gemini => 'Google Gemini',
-        LlmProvider.openai => 'OpenAI-compatible',
-        LlmProvider.groq => 'Groq',
+        LlmProvider.gemini   => 'Google Gemini',
+        LlmProvider.openai   => 'OpenAI-compatible',
+        LlmProvider.groq     => 'Groq',
         LlmProvider.cerebras => 'Cerebras',
-        LlmProvider.ollama => 'Ollama (self-hosted)',
+        LlmProvider.ollama   => 'Ollama (self-hosted)',
       };
 
   String get labelAr => switch (this) {
-        LlmProvider.gemini => 'جوجل جيميناي',
-        LlmProvider.openai => 'متوافق مع OpenAI',
-        LlmProvider.groq => 'جروك',
+        LlmProvider.gemini   => 'جوجل جيميناي',
+        LlmProvider.openai   => 'متوافق مع OpenAI',
+        LlmProvider.groq     => 'جروك',
         LlmProvider.cerebras => 'سيريبراس',
-        LlmProvider.ollama => 'أولاما (محلي)',
+        LlmProvider.ollama   => 'أولاما (محلي)',
       };
 
-  String displayName(String locale) => locale == 'ar' ? labelAr : label;
+  String displayName(String locale) =>
+      locale == 'ar' ? labelAr : label;
 
   /// Whether this provider needs an API key from [Secrets].
   bool get needsApiKey => this != LlmProvider.ollama;
 
   /// Default model id used if the user hasn't customised it.
   String get defaultModel => switch (this) {
-        LlmProvider.gemini => 'gemini-2.0-flash',
-        LlmProvider.openai => 'gpt-4o-mini',
-        LlmProvider.groq => 'llama-3.1-8b-instant',
+        LlmProvider.gemini   => 'gemini-2.0-flash',
+        LlmProvider.openai   => 'gpt-4o-mini',
+        LlmProvider.groq     => 'llama-3.1-8b-instant',
         LlmProvider.cerebras => 'llama3.1-8b',
-        LlmProvider.ollama => 'llama3.2:3b',
+        LlmProvider.ollama   => 'llama3.2:3b',
       };
 
   /// Default base URL for OpenAI-compatible providers.
   String get defaultBaseUrl => switch (this) {
-        LlmProvider.openai => 'https://api.openai.com/v1',
-        LlmProvider.groq => 'https://api.groq.com/openai/v1',
+        LlmProvider.openai   => 'https://api.openai.com/v1',
+        LlmProvider.groq     => 'https://api.groq.com/openai/v1',
         LlmProvider.cerebras => 'https://api.cerebras.ai/v1',
-        LlmProvider.ollama => 'http://localhost:11434/v1',
-        LlmProvider.gemini => '', // not used — has its own SDK
+        LlmProvider.ollama   => 'http://localhost:11434/v1',
+        LlmProvider.gemini   => '', // not used — has its own SDK
       };
 }
 
@@ -77,11 +78,9 @@ class LlmExtractor {
   /// the free tier token limits.
   static String cleanHtmlForLlm(String html, {int maxChars = 6000}) {
     final doc = html_parser.parse(html);
-    doc
-        .querySelectorAll(
-          'script,style,noscript,nav,footer,header,svg,iframe,form,button',
-        )
-        .forEach((e) => e.remove());
+    doc.querySelectorAll(
+      'script,style,noscript,nav,footer,header,svg,iframe,form,button',
+    ).forEach((e) => e.remove());
     final text = doc.body?.text ?? '';
     final squashed = text.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (squashed.length <= maxChars) return squashed;
@@ -101,8 +100,7 @@ class LlmExtractor {
     if (text.length < 50) return null;
 
     final userPrompt = StringBuffer()
-      ..writeln(
-          'Extract the product information from this e-commerce page text.');
+      ..writeln('Extract the product information from this e-commerce page text.');
     if (barcode != null && barcode.isNotEmpty) {
       userPrompt.writeln('Barcode (EAN-13): $barcode');
     }
@@ -140,8 +138,7 @@ class LlmExtractor {
   }
 
   // ── Gemini via official SDK ─────────────────────────────────────────────
-  static Future<String> _runGemini(String prompt,
-      {required String model}) async {
+  static Future<String> _runGemini(String prompt, {required String model}) async {
     final apiKey = await Secrets.instance.getGeminiKey();
     if (apiKey == null || apiKey.isEmpty) {
       throw StateError('Gemini API key not set');
@@ -191,25 +188,23 @@ class LlmExtractor {
       throw StateError('${provider.label} API key not set');
     }
 
-    final res = await http
-        .post(
-          Uri.parse('$baseUrl/chat/completions'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $apiKey',
-          },
-          body: jsonEncode({
-            'model': model,
-            'temperature': 0,
-            'max_tokens': 300,
-            'response_format': {'type': 'json_object'},
-            'messages': [
-              {'role': 'system', 'content': _systemPrompt},
-              {'role': 'user', 'content': prompt},
-            ],
-          }),
-        )
-        .timeout(const Duration(seconds: 30));
+    final res = await http.post(
+      Uri.parse('$baseUrl/chat/completions'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $apiKey',
+      },
+      body: jsonEncode({
+        'model': model,
+        'temperature': 0,
+        'max_tokens': 300,
+        'response_format': {'type': 'json_object'},
+        'messages': [
+          {'role': 'system', 'content': _systemPrompt},
+          {'role': 'user', 'content': prompt},
+        ],
+      }),
+    ).timeout(const Duration(seconds: 30));
 
     if (res.statusCode != 200) {
       throw StateError('${provider.label} HTTP ${res.statusCode}');
@@ -228,10 +223,9 @@ class LlmExtractor {
     // Strip any stray markdown fences if the model didn't respect response_format
     var s = raw.trim();
     if (s.startsWith('```')) {
-      s = s
-          .replaceAll(RegExp(r'^```(?:json)?\s*', caseSensitive: false), '')
-          .replaceAll(RegExp(r'\s*```$'), '')
-          .trim();
+      s = s.replaceAll(RegExp(r'^```(?:json)?\s*', caseSensitive: false), '')
+           .replaceAll(RegExp(r'\s*```$'), '')
+           .trim();
     }
     try {
       final json = jsonDecode(s) as Map<String, dynamic>;

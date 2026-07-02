@@ -8,6 +8,7 @@ import '../../core/providers/scraping_provider.dart';
 import '../../core/services/llm_extractor.dart';
 import '../../core/services/on_device_llm.dart';
 import '../../core/services/secrets.dart';
+import 'pipeline_debugger_screen.dart';
 
 /// Full settings UI for Tier 1/2/3 scraping configuration.
 /// Lets the user:
@@ -50,6 +51,45 @@ class _LlmSettingsScreenState extends State<LlmSettingsScreen> {
       ),
       body: ListView(
         children: [
+          // ── Pipeline debugger ─────────────────────────────────────────
+          // Prominent button at the top so the user can verify their config
+          // actually works before relying on it.
+          Container(
+            margin: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Theme.of(context).colorScheme.primaryContainer,
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: ListTile(
+              leading: Icon(Icons.bug_report,
+                  color: Theme.of(context).colorScheme.primary),
+              title: Text(
+                isRtl
+                    ? 'تنقيح خط الأنابيب — اختبر أي باركود'
+                    : 'Pipeline Debugger — test any barcode',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                isRtl
+                    ? 'شاهد ماذا ترجع كل خطوة (OFF, SearXNG, JSON-LD, LLM)'
+                    : 'See exactly what each step returns (OFF, SearXNG, JSON-LD, LLM)',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const PipelineDebuggerScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
+
           // ── Strategy ────────────────────────────────────────────────
           _Section(isRtl ? 'استراتيجية الاستخراج' : 'Extraction strategy'),
           for (final strat in ExtractionStrategy.values)

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:html/dom.dart' show Document;
 import 'package:html/parser.dart' as html_parser;
 import 'package:http/http.dart' as http;
 
@@ -20,7 +21,10 @@ class ExtractedProduct {
   });
 
   bool get isEmpty =>
-      name == null && brand == null && price == null && imageUrl == null;
+      name == null &&
+      brand == null &&
+      price == null &&
+      imageUrl == null;
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -64,7 +68,9 @@ class ProductSchemaParser {
     final uri = Uri.tryParse(url);
     if (uri == null || !uri.hasScheme) return null;
 
-    final res = await http.get(uri, headers: _headers).timeout(_timeout);
+    final res = await http
+        .get(uri, headers: _headers)
+        .timeout(_timeout);
     if (res.statusCode != 200 || res.body.isEmpty) return null;
     return fromHtml(res.body);
   }
@@ -130,7 +136,8 @@ class ProductSchemaParser {
     void walk(dynamic n) {
       if (n is Map<String, dynamic>) {
         final type = n['@type'];
-        if (type == 'Product' || (type is List && type.contains('Product'))) {
+        if (type == 'Product' ||
+            (type is List && type.contains('Product'))) {
           out.add(n);
         }
         if (n['@graph'] is List) (n['@graph'] as List).forEach(walk);
@@ -139,7 +146,6 @@ class ProductSchemaParser {
         n.forEach(walk);
       }
     }
-
     walk(node);
     return out;
   }
@@ -191,7 +197,7 @@ class ProductSchemaParser {
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
-  static String? _meta(doc, String prop) =>
+  static String? _meta(Document doc, String prop) =>
       doc.querySelector('meta[property="$prop"]')?.attributes['content'];
 
   /// Matches `12.34 SAR`, `SAR 12.34`, `12.34 ر.س`, `12.34 ﷼`, `12.34 SR`.

@@ -12,6 +12,7 @@ import '../../core/models/store.dart';
 import '../../core/models/item_store.dart';
 import '../../core/constants/currencies.dart';
 import '../../core/providers/locale_provider.dart';
+import '../../core/providers/scraping_provider.dart';
 import '../../core/services/barcode_service.dart';
 import '../../core/services/scraper_service.dart';
 import '../scanner/scanner_screen.dart';
@@ -107,137 +108,217 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     final code = _barcode.text.trim();
     if (code.isEmpty) return;
 
-    // Let the user choose which source to query (default: Auto).
     final locale = context.read<LocaleProvider>();
     final langCode = locale.locale?.languageCode ?? 'en';
-    final LookupSource? picked = await showDialog<LookupSource>(
+    final scraping = context.read<ScrapingProvider>();
+
+    // New: show a STRATEGY picker, not the old source picker.
+    // Strategies run the full Tier 1 + 2 + 3 pipeline.
+    // "Basic SearXNG (multi-result picker)" preserves the old behavior.
+    final _LookupChoice? picked = await showDialog<_LookupChoice>(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: Text(locale.isRtl ? 'البحث في:' : 'Look up in:'),
-        children: LookupSource.values
-            .map(
-              (s) => SimpleDialogOption(
-                onPressed: () => Navigator.pop(ctx, s),
-                child: Row(
-                  children: [
-                    const Icon(Icons.travel_explore_outlined, size: 20),
-                    const SizedBox(width: 12),
-                    Text(s.displayName(langCode)),
-                  ],
-                ),
+        title: Text(locale.isRtl ? 'طريقة البحث:' : 'Lookup method:'),
+        children: [
+          // ── Default: use the strategy currently set in Settings ──
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(
+                ctx, _LookupChoice.useConfigured()),
+            child: _ChoiceRow(
+              icon: Icons.auto_awesome,
+              iconColor: Theme.of(ctx).colorScheme.primary,
+              title: locale.isRtl
+                  ? 'استخدم الإعداد الحالي'
+                  : 'Use current setting',
+              subtitle: scraping.strategy.displayName(langCode),
+            ),
+          ),
+          const Divider(height: 1),
+          // ── Each strategy as an explicit option ──
+          for (final strat in ExtractionStrategy.values)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(
+                  ctx, _LookupChoice.strategy(strat)),
+              child: _ChoiceRow(
+                icon: _iconForStrategy(strat),
+                title: strat.displayName(langCode),
+                subtitle: _subtitleForStrategy(strat, langCode),
               ),
-            )
-            .toList(),
+            ),
+          const Divider(height: 1),
+          // ── Legacy: basic SearXNG multi-result picker ──
+          SimpleDialogOption(
+            onPressed: () =>
+                Navigator.pop(ctx, _LookupChoice.basicSearxng()),
+            child: _ChoiceRow(
+              icon: Icons.list_alt,
+              iconColor: Theme.of(ctx).colorScheme.tertiary,
+              title: locale.isRtl
+                  ? 'SearXNG أساسي (قائمة نتائج)'
+                  : 'Basic SearXNG (result list)',
+              subtitle: locale.isRtl
+                  ? 'يفتح نافذة لاختيار المنتج من نتائج SearXNG الخام'
+                  : 'Opens a picker to choose from raw SearXNG results',
+            ),
+          ),
+        ],
       ),
     );
     if (picked == null) return;
 
     setState(() => _busy = true);
-    if (picked == LookupSource.searxng) {
-      final results =
-          await ScraperService.instance.searchBarcodeSearXNGMulti(code);
+
+    try {
+      // ── Branch 1: Basic SearXNG multi-result picker (legacy) ──────
+      if (picked.isBasicSearxng) {
+        await _runBasicSearxngPicker(code, locale, langCode);
+        return;
+      }
+
+      // ── Branch 2: Run the new pipeline with the picked strategy ──
+      final strategy =
+          picked.strategy ?? scraping.strategy;
+      final product = await ScraperService.instance
+          .searchBarcodeWithStrategy(code, strategy);
+
       setState(() => _busy = false);
 
-      if (results.isEmpty) {
+      if (product == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              locale.isRtl
-                  ? 'لم يتم العثور على نتائج في سيركس إن جي'
-                  : 'No results found in SearXNG',
+            content: Text(locale.isRtl
+                ? 'لم يتم العثور على المنتج'
+                : 'Product not found'),
+            action: SnackBarAction(
+              label: locale.isRtl ? 'طريقة أخرى' : 'Other method',
+              onPressed: _lookupBarcode,
             ),
           ),
         );
         return;
       }
 
-      final ScrapedProduct? pickedProduct = await showDialog<ScrapedProduct>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(
-              locale.isRtl ? 'اختر المنتج الصحيح' : 'Pick the right product'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: results.length,
-              separatorBuilder: (_, __) => const Divider(),
-              itemBuilder: (ctx, i) {
-                final p = results[i];
-                return ListTile(
-                  leading: p.imageUrl != null
-                      ? Image.network(p.imageUrl!,
-                          width: 40, height: 40, fit: BoxFit.cover)
-                      : const Icon(Icons.image),
-                  title: Text(p.name),
-                  onTap: () => Navigator.pop(ctx, p),
-                );
-              },
-            ),
-          ),
-        ),
-      );
-
-      if (pickedProduct != null) {
-        setState(() {
-          _name.text = pickedProduct.name;
-          _currency = CurrencyExtension.fromCode(pickedProduct.currency);
-          _imageUrl = pickedProduct.imageUrl;
-        });
-      }
-      return;
-    }
-
-    final lookup = picked == LookupSource.auto
-        ? await BarcodeService.instance.lookup(code)
-        : await BarcodeService.instance.lookupFromSource(code, picked);
-    setState(() => _busy = false);
-
-    if (!lookup.found) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            locale.isRtl ? 'فشل البحث عن الباركود' : 'Barcode lookup failed',
-          ),
-        ),
-      );
-      return;
-    }
-
-    if (lookup.foundLocal) {
-      final item = lookup.localItem!;
-      setState(() {
-        _name.text = item.displayName(langCode);
-        _currency = item.currency;
-        _imageUrl = item.imageUrl;
-        _selectedCategory = null; // We'd need to load it if we want
-      });
-    } else if (lookup.foundOnline) {
-      final product = lookup.onlineProduct!;
+      // Fill in the form with the extracted data.
       setState(() {
         _name.text = product.name;
         _currency = CurrencyExtension.fromCode(product.currency);
         _imageUrl = product.imageUrl;
+        // brand is now available — would need a _brand field; left as TODO
+        // since the existing form doesn't have one wired.
       });
-    } else {
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             locale.isRtl
-                ? 'لم يتم العثور على المنتج في ${picked.displayName('ar')}'
-                : 'Not found in ${picked.displayName('en')}',
+                ? 'تم العثور على المنتج عبر: ${product.source}'
+                : 'Found via: ${product.source}'
+            '${product.price != null ? " · ${product.currency} ${product.price}" : ""}',
           ),
-          action: SnackBarAction(
-            label: locale.isRtl ? 'مصادر أخرى' : 'Other sources',
-            onPressed: _lookupBarcode,
-          ),
+          duration: const Duration(seconds: 4),
         ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lookup error: $e')),
       );
     }
   }
+
+  /// Legacy basic SearXNG flow — opens a multi-result picker dialog.
+  Future<void> _runBasicSearxngPicker(
+    String code,
+    LocaleProvider locale,
+    String langCode,
+  ) async {
+    final results =
+        await ScraperService.instance.searchBarcodeSearXNGMulti(code);
+    setState(() => _busy = false);
+
+    if (results.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(locale.isRtl
+              ? 'لم يتم العثور على نتائج في سيركس إن جي'
+              : 'No results found in SearXNG'),
+        ),
+      );
+      return;
+    }
+
+    final ScrapedProduct? pickedProduct = await showDialog<ScrapedProduct>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(locale.isRtl
+            ? 'اختر المنتج الصحيح'
+            : 'Pick the right product'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: results.length,
+            separatorBuilder: (_, __) => const Divider(),
+            itemBuilder: (ctx, i) {
+              final p = results[i];
+              return ListTile(
+                leading: p.imageUrl != null
+                    ? Image.network(p.imageUrl!,
+                        width: 40, height: 40, fit: BoxFit.cover)
+                    : const Icon(Icons.image),
+                title: Text(p.name),
+                onTap: () => Navigator.pop(ctx, p),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    if (pickedProduct != null) {
+      setState(() {
+        _name.text = pickedProduct.name;
+        _currency = CurrencyExtension.fromCode(pickedProduct.currency);
+        _imageUrl = pickedProduct.imageUrl;
+      });
+    }
+  }
+
+  static IconData _iconForStrategy(ExtractionStrategy s) => switch (s) {
+        ExtractionStrategy.schemaOnly => Icons.code,
+        ExtractionStrategy.schemaThenCloudLlm => Icons.cloud_upload_outlined,
+        ExtractionStrategy.schemaThenOnDevice => Icons.phone_android,
+        ExtractionStrategy.schemaCloudOnDevice => Icons.all_inclusive,
+        ExtractionStrategy.cloudLlmOnly => Icons.cloud,
+        ExtractionStrategy.onDeviceOnly => Icons.memory,
+      };
+
+  static String _subtitleForStrategy(
+          ExtractionStrategy s, String langCode) =>
+      switch (s) {
+        ExtractionStrategy.schemaOnly => langCode == 'ar'
+            ? 'يحلل JSON-LD فقط — مجاني وسريع'
+            : 'Parses JSON-LD only — free & fast',
+        ExtractionStrategy.schemaThenCloudLlm => langCode == 'ar'
+            ? 'بنية → سحابة LLM كاحتياطي'
+            : 'Schema → Cloud LLM as fallback',
+        ExtractionStrategy.schemaThenOnDevice => langCode == 'ar'
+            ? 'بنية → LLM محلي كاحتياطي (يعمل بدون إنترنت)'
+            : 'Schema → On-device LLM as fallback (offline)',
+        ExtractionStrategy.schemaCloudOnDevice => langCode == 'ar'
+            ? 'الكل بالترتيب: بنية ← سحابة ← محلي'
+            : 'All in order: Schema → Cloud → On-device',
+        ExtractionStrategy.cloudLlmOnly => langCode == 'ar'
+            ? 'سحابة LLM مباشرة (تخطي البنية)'
+            : 'Cloud LLM directly (skip schema)',
+        ExtractionStrategy.onDeviceOnly => langCode == 'ar'
+            ? 'LLM محلي مباشرة (تخطي البنية)'
+            : 'On-device LLM directly (skip schema)',
+      };
 
   Future<void> _openScanner() async {
     final code = await Navigator.of(context).push<String>(
@@ -662,3 +743,68 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
     );
   }
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// Helpers for the new strategy-picker lookup dialog
+// ───────────────────────────────────────────────────────────────────────────
+
+/// User's choice in the lookup-method dialog.
+class _LookupChoice {
+  /// If non-null, run this specific strategy for the lookup.
+  /// If null, use the strategy currently configured in ScrapingProvider.
+  final ExtractionStrategy? strategy;
+
+  /// If true, run the legacy `searchBarcodeSearXNGMulti` flow that opens a
+  /// multi-result picker.
+  final bool isBasicSearxng;
+
+  const _LookupChoice._({this.strategy, this.isBasicSearxng = false});
+
+  factory _LookupChoice.useConfigured() => const _LookupChoice._();
+  factory _LookupChoice.strategy(ExtractionStrategy s) =>
+      _LookupChoice._(strategy: s);
+  factory _LookupChoice.basicSearxng() =>
+      const _LookupChoice._(isBasicSearxng: true);
+}
+
+/// Two-line row used in the lookup-method SimpleDialog.
+class _ChoiceRow extends StatelessWidget {
+  final IconData icon;
+  final Color? iconColor;
+  final String title;
+  final String? subtitle;
+  const _ChoiceRow({
+    required this.icon,
+    this.iconColor,
+    required this.title,
+    this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 22, color: iconColor),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: const TextStyle(fontWeight: FontWeight.w500)),
+              if (subtitle != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    subtitle!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+

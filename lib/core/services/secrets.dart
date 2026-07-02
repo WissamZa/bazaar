@@ -19,42 +19,47 @@ class Secrets {
   Secrets._();
   static final Secrets instance = Secrets._();
 
-  // AndroidOptions: enable EncryptedSharedPreferences + require unlocked device.
-  final _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
-      // requireAuthentication: false,  // set true if you want biometric prompt
-    ),
+  // Secure storage config — works with both flutter_secure_storage 9.x and
+  // 10.x. In v10, encryption is on by default and `encryptedSharedPreferences`
+  // was removed (no longer needed — Keystore-backed encryption is automatic).
+  // In v9, `encryptedSharedPreferences: true` adds an extra AES layer on top.
+  //
+  // We use conditional imports / try-catch in callers to stay compatible with
+  // both. The constructor below uses only fields that exist in BOTH major
+  // versions.
+  final _storage = const FlutterSecureStorage(
+    // Android: v9 supports `encryptedSharedPreferences`, v10 enables
+    // encryption by default and removed the option. Passing only fields
+    // common to both versions keeps us compatible with either.
     iOptions: IOSOptions(
       accessibility: KeychainAccessibility.first_unlock,
     ),
   );
 
   // ── Keys ────────────────────────────────────────────────────────────────
-  static const _kGeminiApiKey = 'llm.gemini.api_key';
-  static const _kOpenAiApiKey = 'llm.openai.api_key';
-  static const _kGroqApiKey = 'llm.groq.api_key';
+  static const _kGeminiApiKey   = 'llm.gemini.api_key';
+  static const _kOpenAiApiKey   = 'llm.openai.api_key';
+  static const _kGroqApiKey     = 'llm.groq.api_key';
   static const _kCerebrasApiKey = 'llm.cerebras.api_key';
-  static const _kOllamaBaseUrl = 'llm.ollama.base_url';
+  static const _kOllamaBaseUrl  = 'llm.ollama.base_url';
   static const _kOnDeviceModelPath = 'llm.on_device.model_path';
   static const _kOnDeviceModelName = 'llm.on_device.model_name';
 
   // ── Getters / setters ──────────────────────────────────────────────────
-  Future<String?> getGeminiKey() => _storage.read(key: _kGeminiApiKey);
+  Future<String?> getGeminiKey()   => _storage.read(key: _kGeminiApiKey);
   Future<void> setGeminiKey(String? v) => _writeOrDelete(_kGeminiApiKey, v);
 
-  Future<String?> getOpenAiKey() => _storage.read(key: _kOpenAiApiKey);
+  Future<String?> getOpenAiKey()   => _storage.read(key: _kOpenAiApiKey);
   Future<void> setOpenAiKey(String? v) => _writeOrDelete(_kOpenAiApiKey, v);
 
-  Future<String?> getGroqKey() => _storage.read(key: _kGroqApiKey);
+  Future<String?> getGroqKey()     => _storage.read(key: _kGroqApiKey);
   Future<void> setGroqKey(String? v) => _writeOrDelete(_kGroqApiKey, v);
 
   Future<String?> getCerebrasKey() => _storage.read(key: _kCerebrasApiKey);
   Future<void> setCerebrasKey(String? v) => _writeOrDelete(_kCerebrasApiKey, v);
 
   Future<String?> getOllamaBaseUrl() => _storage.read(key: _kOllamaBaseUrl);
-  Future<void> setOllamaBaseUrl(String? v) =>
-      _writeOrDelete(_kOllamaBaseUrl, v);
+  Future<void> setOllamaBaseUrl(String? v) => _writeOrDelete(_kOllamaBaseUrl, v);
 
   Future<String?> getOnDeviceModelPath() =>
       _storage.read(key: _kOnDeviceModelPath);
