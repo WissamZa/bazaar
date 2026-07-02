@@ -9,11 +9,13 @@ import '../../core/database/dao/item_dao.dart';
 import '../../core/database/dao/store_dao.dart';
 import '../../core/providers/currency_provider.dart';
 import '../../core/providers/locale_provider.dart';
+import '../../core/providers/scraping_provider.dart';
 import '../../core/providers/theme_provider.dart';
 import '../../core/providers/user_provider.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/share_service.dart';
 import 'category_settings_screen.dart';
+import 'llm_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -168,9 +170,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final zip = await BackupService.instance.createBackup();
       if (!mounted) return;
-      await Share.shareXFiles(
-        [XFile(zip.path)],
-        text: 'Bazaar backup ${DateTime.now().toIso8601String()}',
+      // share_plus 12+ deprecates Share.shareXFiles in favor of
+      // SharePlus.instance.share(ShareParams(...)). Using the new API.
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(zip.path)],
+          text: 'Bazaar backup ${DateTime.now().toIso8601String()}',
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -335,7 +341,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final themeProv = context.watch<ThemeProvider>();
     final currencyProv = context.watch<CurrencyProvider>();
     final userProv = context.watch<UserProvider>();
+    // Watch scraping provider so the subtitle updates live when strategy changes.
+    final scraping = context.watch<ScrapingProvider>();
     final isRtl = locale.isRtl;
+
+    // Build a short status line for the search/AI tile.
+    final strategyLabel =
+        scraping.strategy.displayName(isRtl ? 'ar' : 'en');
+    final configOk = scraping.isConfigComplete;
+    final statusText = configOk
+        ? strategyLabel
+        : (isRtl
+            ? 'غير مكتمل — اضغط للإعداد'
+            : 'Incomplete — tap to configure');
 
     return Scaffold(
       appBar: AppBar(title: Text(isRtl ? 'الإعدادات' : 'Settings')),
@@ -352,6 +370,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             },
           ),
+
+          // ─────────────────────────────────────────────────────────────
+          // NEW: Search & AI settings entry point
+          // ─────────────────────────────────────────────────────────────
+          const Divider(),
+          _SectionHeader(isRtl ? 'البحث والذكاء الاصطناعي' : 'Search & AI'),
+          ListTile(
+            leading: Icon(
+              configOk ? Icons.psychology : Icons.psychology_outlined,
+              color: configOk
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.error,
+            ),
+            title: Text(isRtl
+                ? 'إعدادات البحث و LLM'
+                : 'Search & LLM settings'),
+            subtitle: Text(
+              statusText,
+              style: TextStyle(
+                color: configOk ? null : Theme.of(context).colorScheme.error,
+              ),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const LlmSettingsScreen(),
+                ),
+              );
+            },
+          ),
+
           const Divider(),
           _SectionHeader(isRtl ? 'عام' : 'General'),
           ListTile(

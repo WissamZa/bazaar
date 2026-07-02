@@ -1,0 +1,17 @@
+# ─── Paste these dependencies into your existing pubspec.yaml under `dependencies:` ───
+
+  # ── Secure storage for API keys (uses Android Keystore / iOS Keychain) ──
+  flutter_secure_storage: ^9.2.2
+
+  # ── Cloud LLM providers (Tier 2) ──
+  # Google Gemini (official Dart SDK) — recommended free tier
+  google_generative_ai: ^0.4.6
+
+  # ── On-device LLM (Tier 3) ──
+  # flutter_gemma is the most mature Flutter binding for MediaPipe LLM
+  # Inference. Despite the name, it runs Gemma, Llama 3.x, AND Qwen 2.5 —
+  # all of them ship as .task files for the MediaPipe runtime.
+  # Requires native setup, see lib/core/services/on_device_llm.dart header.
+  flutter_gemma: ^1.1.2
+
+  # path_provider is already in your pubspec; required for the model file path.

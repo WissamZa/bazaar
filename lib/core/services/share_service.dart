@@ -54,7 +54,14 @@ class ShareService {
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/$filename');
     await file.writeAsString(json);
-    await Share.shareXFiles([XFile(file.path)], text: 'Shared from Bazaar');
+    // share_plus 12+ deprecates Share.shareXFiles in favor of
+    // SharePlus.instance.share(ShareParams(...)). Using the new API.
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        text: 'Shared from Bazaar',
+      ),
+    );
   }
 
   // ───────────────────────── IMPORT ───────────────────────────────
