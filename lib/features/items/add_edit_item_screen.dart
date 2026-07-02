@@ -522,6 +522,13 @@ class _AddEditItemScreenState extends State<AddEditItemScreen> {
       );
     }
 
+    // 3. If no stores were selected, link to the Default store so the item
+    //    is never orphaned. (User can always remove it from there later.)
+    if (_selectedStores.isEmpty && itemId != null) {
+      final savedItem = item.copyWith(id: itemId, updatedAt: now);
+      await BarcodeService.instance.ensureDefaultStoreLink(savedItem);
+    }
+
     if (!mounted) return;
     setState(() => _busy = false);
     Navigator.of(context).pop();

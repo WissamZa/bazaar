@@ -412,27 +412,41 @@ class _StepCard extends StatelessWidget {
           if (step.data != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: _buildData(step.data!),
+              child: _buildData(context, step.data!),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildData(Map<String, dynamic> data) {
+  Widget _buildData(BuildContext context, Map<String, dynamic> data) {
     final pretty = const JsonEncoder.withIndent('  ').convert(data);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        // Use theme-aware colors so the JSON is readable in both light and
+        // dark mode. The old `Colors.grey.shade100` produced white-on-white
+        // text in dark mode.
+        color: isDark
+            ? theme.colorScheme.surfaceContainerHighest
+            : theme.colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant,
+          width: 0.5,
+        ),
       ),
       child: SelectableText(
         pretty,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'RobotoMono',
           fontSize: 11,
+          // Use theme.onSurface so the text adapts: dark text on light bg,
+          // light text on dark bg.
+          color: theme.colorScheme.onSurface,
         ),
       ),
     );
