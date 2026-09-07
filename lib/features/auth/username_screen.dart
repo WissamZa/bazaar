@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers/user_provider.dart';
+import '../../core/design/app_dimens.dart';
+import '../../core/providers/settings_providers.dart';
+import '../../l10n/generated/app_localizations.dart';
 
-/// Shown on first launch (or whenever [UserProvider.hasUser] is false) to
-/// collect a local username. No password, no auth — just an identity string.
-class UsernameScreen extends StatefulWidget {
+/// First-launch onboarding: local-only username. Bilingual and branded —
+/// the v1 screen was entirely English and ignored the palette.
+class UsernameScreen extends ConsumerStatefulWidget {
   const UsernameScreen({super.key});
 
   @override
-  State<UsernameScreen> createState() => _UsernameScreenState();
+  ConsumerState<UsernameScreen> createState() => _UsernameScreenState();
 }
 
-class _UsernameScreenState extends State<UsernameScreen> {
+class _UsernameScreenState extends ConsumerState<UsernameScreen> {
   final _controller = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  bool _busy = false;
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -24,23 +26,22 @@ class _UsernameScreenState extends State<UsernameScreen> {
   }
 
   Future<void> _submit() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _busy = true);
-    await context.read<UserProvider>().set(_controller.text);
-    if (!mounted) return;
-    setState(() => _busy = false);
-    // The MaterialApp rebuilds and shows HomeShell automatically because
-    // UserProvider notifies listeners.
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    await ref.read(userProvider.notifier).set(_controller.text.trim());
+    // GoRouter's refreshListenable redirects to Home.
   }
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
+
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+            padding: const EdgeInsets.all(AppDimens.space6),
             child: Form(
               key: _formKey,
               child: Column(
@@ -48,70 +49,79 @@ class _UsernameScreenState extends State<UsernameScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Container(
-                    width: 96,
-                    height: 96,
-                    margin: const EdgeInsets.only(bottom: 24),
+                    width: 88,
+                    height: 88,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer,
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(AppDimens.radiusXl),
                     ),
                     child: Icon(
                       Icons.shopping_basket_rounded,
-                      size: 48,
-                      color: theme.colorScheme.onPrimaryContainer,
+                      size: 44,
+                      color: theme.colorScheme.primary,
                     ),
                   ),
+                  const SizedBox(height: AppDimens.space5),
                   Text(
-                    'Welcome to Bazaar',
+                    l.welcomeTitle,
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: theme.textTheme.headlineMedium,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppDimens.space2),
                   Text(
-                    'Your local shopping companion',
+                    l.welcomeSubtitle,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 32),
-                  Text('Username',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppDimens.space8),
                   TextFormField(
                     controller: _controller,
-                    autofocus: true,
                     textInputAction: TextInputAction.done,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      hintText: 'Enter your name to continue',
-                      prefixIcon: Icon(Icons.person_outline),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Please enter a name';
-                      }
-                      if (v.trim().length < 2) {
-                        return 'At least 2 characters';
-                      }
-                      return null;
-                    },
                     onFieldSubmitted: (_) => _submit(),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? l.usernameRequired
+                        : null,
+                    decoration: InputDecoration(
+                      labelText: l.usernameField,
+                      prefixIcon: const Icon(Icons.person_outline),
+                    ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: AppDimens.space4),
                   FilledButton(
-                    onPressed: _busy ? null : _submit,
-                    child: _busy
+                    onPressed: _saving ? null : _submit,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(
+                        AppDimens.minTouchTarget,
+                      ),
+                    ),
+                    child: _saving
                         ? const SizedBox(
-                            width: 18,
-                            height: 18,
+                            width: 20,
+                            height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Continue'),
+                        : Text(l.continueLabel),
+                  ),
+                  const SizedBox(height: AppDimens.space4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.lock_outline,
+                        size: 14,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        l.privacyNote,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -1,196 +1,225 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:provider/provider.dart';
 
-import '../../core/providers/locale_provider.dart';
-import 'scan_result_screen.dart';
+import '../../core/design/app_dimens.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../core/router/app_router.dart';
 
-/// Full-screen camera view that continuously scans for barcodes.
-/// Returns the scanned code via Navigator.pop when one is detected, then
-/// pushes [ScanResultScreen] which orchestrates the lookup flow.
-class ScannerScreen extends StatefulWidget {
-  const ScannerScreen({super.key});
+/// Camera barcode scanner. Returns the scanned code as a [String] route
+/// result, or (when [returnToListId] is set) navigates straight to the
+/// lookup result screen bound to that list.
+class ScannerScreen extends ConsumerStatefulWidget {
+  final int? returnToListId;
+
+  const ScannerScreen({super.key, this.returnToListId});
 
   @override
-  State<ScannerScreen> createState() => _ScannerScreenState();
+  ConsumerState<ScannerScreen> createState() => _ScannerScreenState();
 }
 
-class _ScannerScreenState extends State<ScannerScreen> {
-  late final MobileScannerController _controller;
-  bool _permissionGranted = false;
-  bool _checking = true;
-  bool _processed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = MobileScannerController(
-      detectionSpeed: DetectionSpeed.noDuplicates,
-      returnImage: false,
-    );
-    _initPermission();
-  }
-
-  Future<void> _initPermission() async {
-    final status = await Permission.camera.request();
-    setState(() {
-      _permissionGranted = status.isGranted;
-      _checking = false;
-    });
-  }
+class _ScannerScreenState extends ConsumerState<ScannerScreen> {
+  MobileScannerController? _controller;
+  bool _completed = false;
+  bool _torchOn = false;
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
+  Future<void> _ensureController() async {
+    if (_controller != null) return;
+    _controller = MobileScannerController(
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      formats: const [
+        BarcodeFormat.ean13,
+        BarcodeFormat.ean8,
+        BarcodeFormat.upcA,
+        BarcodeFormat.upcE,
+        BarcodeFormat.code128,
+      ],
+    );
+  }
+
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (_processed) return;
-    final barcodes = capture.barcodes;
-    if (barcodes.isEmpty) return;
-    final code = barcodes.first.rawValue;
+    if (_completed) return;
+    final code = capture.barcodes.firstOrNull?.rawValue;
     if (code == null || code.isEmpty) return;
-    _processed = true;
-    await _controller.stop();
-
+    _completed = true;
+    HapticFeedback.mediumImpact();
     if (!mounted) return;
-    // Pop the scanner with the code as the return value — the calling
-    // screen can either save the code or push the lookup screen itself.
-    Navigator.of(context).pop(code);
+    if (widget.returnToListId != null) {
+      context.pushReplacement(
+        Routes.scanResult(code, listId: widget.returnToListId.toString()),
+      );
+    } else {
+      context.pushReplacement(Routes.scanResult(code));
+    }
   }
 
-  Future<void> _openManualLookup() async {
-    final code = await _showManualEntry();
-    if (code == null || code.isEmpty) return;
-    if (!mounted) return;
-    Navigator.of(context).pop(code);
-  }
-
-  Future<String?> _showManualEntry() {
-    final ctrl = TextEditingController();
-    return showDialog<String>(
+  Future<void> _openManualEntry() async {
+    final l = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+    final code = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Enter barcode'),
+      builder: (context) => AlertDialog(
+        title: Text(l.enterManually),
         content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.number,
+          controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'e.g. 6281007021234'),
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(labelText: l.barcodeManualInput),
+          onSubmitted: (v) => Navigator.of(context).pop(v),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l.commonCancel),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Lookup'),
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: Text(l.continueLabel),
           ),
         ],
       ),
     );
+    controller.dispose();
+    if (code == null || code.isEmpty || !mounted) return;
+    _completed = true;
+    if (widget.returnToListId != null) {
+      context.pushReplacement(
+        Routes.scanResult(code, listId: widget.returnToListId.toString()),
+      );
+    } else {
+      context.pushReplacement(Routes.scanResult(code));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final locale = context.watch<LocaleProvider>();
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(locale.isRtl ? 'مسح الباركود' : 'Scan Barcode'),
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        title: Text(l.scannerTitle),
         actions: [
           IconButton(
-            icon: const Icon(Icons.flash_on),
-            tooltip: locale.isRtl ? 'الفلاش' : 'Toggle Flash',
-            onPressed: () => _controller.toggleTorch(),
+            tooltip: l.enterManually,
+            icon: const Icon(Icons.keyboard_alt_outlined),
+            onPressed: _openManualEntry,
           ),
           IconButton(
-            icon: const Icon(Icons.keyboard),
-            tooltip: locale.isRtl ? 'إدخال يدوي' : 'Manual entry',
-            onPressed: _openManualLookup,
+            icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
+            onPressed: () async {
+              await _controller?.toggleTorch();
+              setState(() => _torchOn = !_torchOn);
+            },
           ),
         ],
       ),
-      body: _checking
-          ? const Center(child: CircularProgressIndicator())
-          : !_permissionGranted
-              ? _PermissionDenied(
-                  onRetry: _initPermission,
-                  onOpenSettings: () => openAppSettings(),
-                )
-              : Stack(
-                  children: [
-                    MobileScanner(
-                      controller: _controller,
-                      onDetect: _onDetect,
-                    ),
-                    // Scan reticle overlay
-                    Center(
-                      child: Container(
-                        width: MediaQuery.of(context).size.width * 0.8,
-                        height: 200,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              width: 2,),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 32,
-                      left: 0,
-                      right: 0,
-                      child: Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 8,),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            locale.isRtl ? 'جاري المسح...' : 'Scanning...',
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+      body: FutureBuilder<PermissionStatus>(
+        future: Permission.camera.request(),
+        builder: (context, snapshot) {
+          final status = snapshot.data;
+          if (status == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!status.isGranted) {
+            return _PermissionDenied(onOpenSettings: openAppSettings);
+          }
+          _ensureController();
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              MobileScanner(
+                controller: _controller,
+                onDetect: _onDetect,
+                errorBuilder: (context, error) => Center(
+                  child: Text(
+                    '${l.commonError}\n$error',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white),
+                  ),
                 ),
+              ),
+              // Reticle
+              IgnorePointer(
+                child: Container(
+                  width: AppDimens.scanReticle,
+                  height: AppDimens.scanReticle * 0.62,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppDimens.radiusL),
+                    border: Border.all(
+                      color: theme.colorScheme.primary,
+                      width: 2.5,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 64,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    l.scanning,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
 
 class _PermissionDenied extends StatelessWidget {
-  final VoidCallback onRetry;
-  final VoidCallback onOpenSettings;
-  const _PermissionDenied(
-      {required this.onRetry, required this.onOpenSettings,});
+  final Future<void> Function() onOpenSettings;
+
+  const _PermissionDenied({required this.onOpenSettings});
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppDimens.space6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.no_photography, size: 64),
-            const SizedBox(height: 16),
+            const Icon(Icons.no_photography_outlined, size: 56),
+            const SizedBox(height: AppDimens.space4),
             Text(
-              'Camera permission is required to scan barcodes',
+              l.cameraPermissionRequired,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
+              style: theme.textTheme.titleMedium,
             ),
-            const SizedBox(height: 24),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
-            const SizedBox(height: 12),
-            TextButton(
+            const SizedBox(height: AppDimens.space4),
+            FilledButton.icon(
               onPressed: onOpenSettings,
-              child: const Text('Open Settings'),
+              icon: const Icon(Icons.settings_outlined, size: 18),
+              label: Text(l.commonOpenSettings),
             ),
           ],
         ),

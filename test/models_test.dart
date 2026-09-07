@@ -1,82 +1,111 @@
+import 'package:bazaar/core/constants/currencies.dart';
+import 'package:bazaar/core/models/models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:bazaar/core/models/item.dart';
-import 'package:bazaar/core/models/store.dart';
-import 'package:bazaar/core/models/shopping_list.dart';
-import 'package:bazaar/core/models/list_item.dart';
-
+/// Wire-format compatibility: the JSON keys here are consumed by v1.x apps
+/// (and produced by them) — renaming a key silently breaks cross-version
+/// import/export.
 void main() {
-  group('Item toJson / fromJson round-trip', () {
-    test('preserves all fields', () {
-      final now = DateTime.utc(2025, 1, 1);
-      final a = Item(
-        id: 7,
-        barcode: '6281007021234',
-        nameEn: 'Milk 1L',
-        nameAr: 'حليب 1 لتر',
-        price: 5.75,
-        imageUrl: 'https://example.com/milk.png',
-        createdAt: now,
-        updatedAt: now,
-      );
-      final json = a.toJson();
-      final b = Item.fromJson(json);
-      expect(b.id, a.id);
-      expect(b.barcode, a.barcode);
-      expect(b.nameEn, a.nameEn);
-      expect(b.nameAr, a.nameAr);
-      expect(b.price, a.price);
-      expect(b.imageUrl, a.imageUrl);
-    });
+  test('Item JSON round-trip keeps the v1 keys', () {
+    final item = Item(
+      id: 1,
+      barcode: '6281000000015',
+      brand: 'Almarai',
+      nameEn: 'Milk 1L',
+      nameAr: 'حليب',
+      price: 6.5,
+      currency: AppCurrency.sar,
+      createdAt: DateTime.parse('2026-01-01T10:00:00.000'),
+      updatedAt: DateTime.parse('2026-01-02T10:00:00.000'),
+    );
+    final json = item.toJson();
+    expect(json.keys, containsAll([
+      'barcode', 'brand', 'name_en', 'name_ar', 'price', 'currency',
+      'image_url', 'category_id', 'created_at', 'updated_at',
+    ]));
 
-    test('displayName falls back to English when AR is null', () {
-      final a = Item(
-        nameEn: 'Bread',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-      expect(a.displayName('ar'), 'Bread');
-    });
+    final back = Item.fromJson(json);
+    expect(back.barcode, item.barcode);
+    expect(back.nameEn, item.nameEn);
+    expect(back.nameAr, item.nameAr);
+    expect(back.price, item.price);
+    expect(back.currency, item.currency);
+    expect(back.createdAt, item.createdAt);
   });
 
-  group('Store', () {
-    test('round-trip', () {
-      final s = Store(
-        id: 1,
-        name: 'Panda',
-        nameAr: 'بنده',
-        website: 'https://pandamart.com',
-        createdAt: DateTime.utc(2024, 6, 1),
-      );
-      expect(Store.fromJson(s.toJson()).name, 'Panda');
-    });
+  test('Store / ShoppingList / ListItem JSON keep the v1 keys', () {
+    final storeJson = Store(
+      id: 3,
+      name: 'Panda',
+      nameAr: 'بندة',
+      createdAt: DateTime.parse('2026-01-01T00:00:00.000'),
+    ).toJson();
+    expect(storeJson['name_ar'], 'بندة');
+    final storeBack = Store.fromJson(storeJson);
+    expect(storeBack.nameAr, 'بندة');
+
+    final listJson = ShoppingList(
+      id: 9,
+      name: 'Weekly',
+      owner: 'wissam',
+      createdAt: DateTime.parse('2026-01-01T00:00:00.000'),
+      updatedAt: DateTime.parse('2026-01-01T00:00:00.000'),
+    ).toJson();
+    expect(listJson['owner'], 'wissam');
+    final listBack = ShoppingList.fromJson(listJson);
+    expect(listBack.name, 'Weekly');
+
+    final liJson = ListItem(
+      id: 11,
+      listId: 9,
+      itemId: 1,
+      quantity: 3,
+      isChecked: true,
+      preferredStoreId: 3,
+    ).toJson();
+    expect(liJson['is_checked'], 1);
+    expect(liJson['preferred_store_id'], 3);
+    final liBack = ListItem.fromJson(liJson);
+    expect(liBack.isChecked, isTrue);
+    expect(liBack.quantity, 3);
   });
 
-  group('ShoppingList + ListItem', () {
-    test('round-trip', () {
-      final now = DateTime.now();
-      final list = ShoppingList(
-        id: 3,
-        name: 'Weekly',
-        nameAr: 'أسبوعي',
-        owner: 'sara',
-        createdAt: now,
-        updatedAt: now,
-      );
-      expect(ShoppingList.fromJson(list.toJson()).owner, 'sara');
-
-      const li = ListItem(
-        id: 1,
-        listId: 3,
-        itemId: 7,
-        quantity: 2,
-        isChecked: true,
-        note: 'low fat',
-      );
-      final rt = ListItem.fromJson(li.toJson());
-      expect(rt.quantity, 2);
-      expect(rt.isChecked, true);
-      expect(rt.note, 'low fat');
+  test('v1 fallback keys (camelCase) still parse', () {
+    final item = Item.fromJson({
+      'barcode': '1',
+      'nameEn': 'Tea',
+      'nameAr': 'شاي',
+      'price': 3,
+      'currency': 'SAR',
+      'created_at': '2026-01-01T00:00:00.000',
+      'updated_at': '2026-01-01T00:00:00.000',
     });
+    expect(item.nameEn, 'Tea');
+    expect(item.nameAr, 'شاي');
+
+    final li = ListItem.fromJson({
+      'listId': 1,
+      'itemId': 2,
+      'isChecked': true,
+    });
+    expect(li.isChecked, isTrue);
+  });
+
+  test('display name falls back across languages', () {
+    final item = Item(
+      nameEn: 'Rice',
+      nameAr: 'أرز',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    expect(item.displayName('ar'), 'أرز');
+    expect(item.displayName('en'), 'Rice');
+    expect(
+        Item(
+          nameEn: 'Rice',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ).displayName('ar'),
+        'Rice');
   });
 }

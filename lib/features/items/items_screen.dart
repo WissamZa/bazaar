@@ -1,429 +1,256 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../core/database/dao/item_dao.dart';
-import '../../core/models/item.dart';
-import '../../core/providers/locale_provider.dart';
-import '../../widgets/currency_display.dart';
-import '../../widgets/empty_state.dart';
-import 'add_edit_item_screen.dart';
+import '../../core/constants/currencies.dart';
+import '../../core/database/daos/item_dao.dart';
+import '../../core/database/app_database.dart' show ItemRow;
+import '../../core/design/app_dimens.dart';
+import '../../core/design/components/app_image.dart';
+import '../../core/design/components/empty_state.dart';
+import '../../core/design/components/price_text.dart';
+import '../../core/design/components/swipe_to_delete.dart';
+import '../../core/providers/data_providers.dart';
+import '../../core/providers/database_provider.dart';
+import '../../core/providers/settings_providers.dart';
+import '../../core/models/models.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../core/router/app_router.dart';
 
-enum SortOption {
-  newest,
-  oldest,
-  priceLowHigh,
-  priceHighLow,
-  nameAZ,
-  nameZA,
-}
-
-enum GroupOption {
-  none,
-  brand,
-  category,
-}
-
-class ItemsScreen extends StatefulWidget {
+/// Searchable, sortable item catalog with effective prices. Deletes and
+/// edits act on the database; the UI updates via the stream.
+class ItemsScreen extends ConsumerStatefulWidget {
   const ItemsScreen({super.key});
 
   @override
-  State<ItemsScreen> createState() => _ItemsScreenState();
+  ConsumerState<ItemsScreen> createState() => _ItemsScreenState();
 }
 
-class _ItemsScreenState extends State<ItemsScreen> {
-  final _searchCtrl = TextEditingController();
-  List<Item> _items = [];
-  bool _loading = true;
-  String _query = '';
-  SortOption _sortOption = SortOption.newest;
-  GroupOption _groupOption = GroupOption.none;
+class _ItemsScreenState extends ConsumerState<ItemsScreen> {
+  final _searchController = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    _refresh();
-  }
-
-  Future<void> _refresh({String? query}) async {
-    setState(() => _loading = true);
-    try {
-      final q = query ?? _query;
-      var items = q.isEmpty
-          ? await ItemDao.instance.all()
-          : await ItemDao.instance.search(q);
-
-      // Apply sorting
-      items = List.from(items);
-      switch (_sortOption) {
-        case SortOption.newest:
-          items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          break;
-        case SortOption.oldest:
-          items.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-          break;
-        case SortOption.priceLowHigh:
-          items.sort((a, b) => (a.price ?? 0).compareTo(b.price ?? 0));
-          break;
-        case SortOption.priceHighLow:
-          items.sort((a, b) => (b.price ?? 0).compareTo(a.price ?? 0));
-          break;
-        case SortOption.nameAZ:
-          items.sort(
-            (a, b) => a.nameEn.toLowerCase().compareTo(b.nameEn.toLowerCase()),
-          );
-          break;
-        case SortOption.nameZA:
-          items.sort(
-            (a, b) => b.nameEn.toLowerCase().compareTo(a.nameEn.toLowerCase()),
-          );
-          break;
-      }
-
-      _items = items;
-    } catch (e) {
-      debugPrint('Error refreshing items: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final locale = context.watch<LocaleProvider>();
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchCtrl,
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText:
-                        locale.isRtl ? 'ابحث عن منتجات...' : 'Search items...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _query.isEmpty
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              _query = '';
-                              _refresh();
-                            },
-                          ),
-                  ),
-                  onChanged: (v) {
-                    _query = v;
-                    _refresh(query: v);
-                  },
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final currency = ref.watch(currencyProvider);
+    final items = ref.watch(itemsStreamProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l.itemsTitle),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.tune),
+            tooltip: l.sortAndGroup,
+            onPressed: () => _openSortSheet(context),
+          ),
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner_rounded),
+            tooltip: l.scanBarcode,
+            onPressed: () => context.push(Routes.scan()),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppDimens.space4,
+              0,
+              AppDimens.space4,
+              AppDimens.space2,
+            ),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (v) => ref.read(itemSearchProvider.notifier).state = v,
+              decoration: InputDecoration(
+                hintText: l.searchItems,
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: ListenableBuilder(
+                  listenable: _searchController,
+                  builder: (context, _) => _searchController.text.isEmpty
+                      ? const SizedBox.shrink()
+                      : IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            ref.read(itemSearchProvider.notifier).state = '';
+                          },
+                        ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.sort),
-                onPressed: () => _showSortMenu(context, locale),
-              ),
-              IconButton(
-                icon: const Icon(Icons.grid_view),
-                onPressed: () => _showGroupMenu(context, locale),
-              ),
-            ],
+            ),
           ),
-        ),
-        Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _items.isEmpty
-                  ? EmptyState(
-                      icon: Icons.inventory_2_outlined,
-                      title:
-                          locale.isRtl ? 'لا توجد منتجات بعد' : 'No items yet',
-                      hint: locale.isRtl
-                          ? 'اضغط على زر + لإضافة أول منتج'
-                          : 'Tap the + button to add your first item',
-                      actionLabel: locale.isRtl ? 'إضافة منتج' : 'Add Item',
-                      onAction: () => _openAddEdit(),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _refresh,
-                      child: _buildList(context, locale),
-                    ),
-        ),
-      ],
+          Expanded(
+            child: items.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('${l.commonError}: $e')),
+              data: (rows) {
+                if (rows.isEmpty) {
+                  return EmptyState(
+                    icon: Icons.inventory_2_outlined,
+                    title: ref.read(itemSearchProvider).isEmpty
+                        ? l.noItems
+                        : l.noItemsToAdd,
+                    hint: ref.read(itemSearchProvider).isEmpty
+                        ? l.noItemsHint
+                        : null,
+                  );
+                }
+                return RefreshIndicator(
+                  onRefresh: () async {},
+                  child: ListView.builder(
+                    padding: AppDimens.pagePadding.copyWith(bottom: 96),
+                    itemCount: rows.length,
+                    itemBuilder: (context, i) {
+                      final row = rows[i];
+                      return _ItemCard(
+                        row: row,
+                        currency: currency,
+                        locale: ref.read(localeProvider.notifier).effectiveCode,
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'items-fab',
+        onPressed: () => context.push(Routes.newItem()),
+        icon: const Icon(Icons.add),
+        label: Text(l.addItem),
+      ),
     );
   }
 
-  Widget _buildList(BuildContext context, LocaleProvider locale) {
-    final isRtl = locale.isRtl;
-
-    if (_groupOption == GroupOption.none) {
-      return ListView.builder(
-        itemCount: _items.length,
-        itemBuilder: (_, i) =>
-            _buildItemDismissible(context, _items[i], i, locale),
-      );
-    }
-
-    // Group items
-    final Map<String, List<Item>> grouped = {};
-    for (final item in _items) {
-      String key;
-      if (_groupOption == GroupOption.brand) {
-        key = item.brand?.trim().toUpperCase() ??
-            (isRtl ? 'بدون ماركة' : 'No Brand');
-      } else {
-        key = item.categoryId?.toString() ??
-            (isRtl ? 'بدون تصنيف' : 'No Category');
-      }
-      grouped.putIfAbsent(key, () => []).add(item);
-    }
-
-    final keys = grouped.keys.toList()..sort();
-
-    return ListView(
-      children: keys.map((key) {
-        final groupItems = grouped[key]!;
-        return Column(
+  void _openSortSheet(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ListTile(
-              title: Text(key,
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              tileColor: Theme.of(context).colorScheme.surfaceVariant,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppDimens.space5),
+              child: Text(l.sortBy, style: theme.textTheme.titleMedium),
             ),
-            ...groupItems.map((item) => _buildItemDismissible(
-                context, item, _items.indexOf(item), locale)),
+            const SizedBox(height: AppDimens.space2),
+            for (final sort in ItemSort.values)
+              RadioListTile<ItemSort>(
+                title: Text(switch (sort) {
+                  ItemSort.newest => l.sortNewest,
+                  ItemSort.name => l.sortName,
+                  ItemSort.priceHigh => l.sortPriceHigh,
+                  ItemSort.priceLow => l.sortPriceLow,
+                }),
+                value: sort,
+                groupValue: ref.read(itemSortProvider),
+                onChanged: (v) {
+                  ref.read(itemSortProvider.notifier).set(v!);
+                  Navigator.of(context).pop();
+                },
+              ),
           ],
-        );
-      }).toList(),
+        ),
+      ),
     );
   }
+}
 
-  Widget _buildItemDismissible(
-      BuildContext context, Item item, int index, LocaleProvider locale) {
-    final isRtl = locale.isRtl;
-    final langCode = locale.locale?.languageCode ?? 'en';
+class _ItemCard extends ConsumerWidget {
+  final ItemWithEffectivePrice row;
+  final AppCurrency currency;
+  final String locale;
 
-    return Dismissible(
-      key: ValueKey(item.id ?? index),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        color: Colors.red,
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 24),
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      confirmDismiss: (_) async {
-        return await showDialog<bool>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: Text(isRtl ? 'تأكيد الحذف؟' : 'Confirm delete?'),
-                content: Text(isRtl
-                    ? 'لا يمكن التراجع عن هذا الإجراء.'
-                    : 'This action cannot be undone.'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+  const _ItemCard({
+    required this.row,
+    required this.currency,
+    required this.locale,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final l = AppLocalizations.of(context)!;
+    final item = row.item;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppDimens.space2),
+      child: SwipeToDelete(
+        confirmTitle: l.deleteItemTitle,
+        confirmMessage: l.deleteItemMessage(item.displayName(locale)),
+        onConfirmed: () async {
+          await ref.read(databaseProvider).itemDao.deleteItem(item.id);
+          if (context.mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(l.itemDeleted)));
+          }
+        },
+        child: Card(
+          child: ListTile(
+            onTap: () => context.push(Routes.item(item.id)),
+            leading: AppImage(url: item.imageUrl),
+            title: Text(
+              item.displayName(locale),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Row(
+              children: [
+                if (item.brand != null && item.brand!.isNotEmpty)
+                  Flexible(
+                    child: Text(
+                      item.brand!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: Text(isRtl ? 'حذف' : 'Delete'),
+                if (item.barcode != null) ...[
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      item.barcode!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontFamily: 'AppMono',
+                        fontSize: 10.5,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ),
                 ],
-              ),
-            ) ??
-            false;
-      },
-      onDismissed: (_) async {
-        await ItemDao.instance.delete(item.id!);
-        _items.removeWhere((it) => it.id == item.id);
-        setState(() {});
-      },
-      child: ListTile(
-        leading: item.imageUrl != null && item.imageUrl!.isNotEmpty
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Image.network(
-                  item.imageUrl!,
-                  width: 48,
-                  height: 48,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      _placeholderIcon(),
-                ),
-              )
-            : _placeholderIcon(),
-        title: Text(item.displayName(langCode)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (item.brand != null && item.brand!.isNotEmpty)
-              Text('${isRtl ? 'الماركة: ' : 'Brand: '}${item.brand}',
-                  style: Theme.of(context).textTheme.bodySmall),
-            if (item.barcode != null)
-              Text('Barcode: ${item.barcode}',
-                  style: Theme.of(context).textTheme.bodySmall),
-            Text(
-              '${isRtl ? 'أضيف في ' : 'Added on '}${item.createdAt.toLocal().toString().split(' ')[0]}',
-              style: Theme.of(context).textTheme.labelSmall,
+              ],
             ),
-          ],
+            trailing: PriceText(
+              row.displayPrice != null
+                  ? currencyFromCode(
+                      row.effectiveCurrency,
+                    ).convertTo(row.displayPrice!, currency)
+                  : null,
+              currency: currency,
+              style: theme.textTheme.titleSmall,
+            ),
+          ),
         ),
-        trailing: CurrencyDisplay(amount: item.price),
-        onTap: () => _openAddEdit(item: item),
-      ),
-    );
-  }
-
-  void _showSortMenu(BuildContext context, LocaleProvider locale) {
-    final isRtl = locale.isRtl;
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              isRtl ? 'ترتيب المنتجات' : 'Sort Items',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.date_range),
-            title: Text(isRtl ? 'الأحدث أولاً' : 'Newest First'),
-            onTap: () {
-              setState(() => _sortOption = SortOption.newest);
-              _refresh();
-              Navigator.pop(ctx);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.date_range),
-            title: Text(isRtl ? 'الأقدم أولاً' : 'Oldest First'),
-            onTap: () {
-              setState(() => _sortOption = SortOption.oldest);
-              _refresh();
-              Navigator.pop(ctx);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.price_check),
-            title:
-                Text(isRtl ? 'السعر: من الأقل للأعلى' : 'Price: Low to High'),
-            onTap: () {
-              setState(() => _sortOption = SortOption.priceLowHigh);
-              _refresh();
-              Navigator.pop(ctx);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.price_check),
-            title:
-                Text(isRtl ? 'السعر: من الأعلى للأقل' : 'Price: High to Low'),
-            onTap: () {
-              setState(() => _sortOption = SortOption.priceHighLow);
-              _refresh();
-              Navigator.pop(ctx);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.sort_by_alpha),
-            title: Text(isRtl ? 'الاسم: أ-ي' : 'Name: A-Z'),
-            onTap: () {
-              setState(() => _sortOption = SortOption.nameAZ);
-              _refresh();
-              Navigator.pop(ctx);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.sort_by_alpha),
-            title: Text(isRtl ? 'الاسم: ي-أ' : 'Name: Z-A'),
-            onTap: () {
-              setState(() => _sortOption = SortOption.nameZA);
-              _refresh();
-              Navigator.pop(ctx);
-            },
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
-
-  void _showGroupMenu(BuildContext context, LocaleProvider locale) {
-    final isRtl = locale.isRtl;
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              isRtl ? 'تجميع المنتجات' : 'Group Items',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.list),
-            title: Text(isRtl ? 'بدون تجميع' : 'No Grouping'),
-            onTap: () {
-              setState(() => _groupOption = GroupOption.none);
-              Navigator.pop(ctx);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.branding_watermark),
-            title: Text(isRtl ? 'حسب الماركة' : 'By Brand'),
-            onTap: () {
-              setState(() => _groupOption = GroupOption.brand);
-              Navigator.pop(ctx);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.category),
-            title: Text(isRtl ? 'حسب التصنيف' : 'By Category'),
-            onTap: () {
-              setState(() => _groupOption = GroupOption.category);
-              Navigator.pop(ctx);
-            },
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openAddEdit({Item? item}) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => AddEditItemScreen(item: item),
-      ),
-    );
-    _refresh();
-  }
-
-  /// Square grey icon shown when an item has no image or the image fails
-  /// to load. Keeps the ListTile layout stable so the row doesn't shift
-  /// when images finish loading later.
-  Widget _placeholderIcon() {
-    return Container(
-      width: 48,
-      height: 48,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Icon(
-        Icons.inventory_2_outlined,
-        size: 24,
-        color: Theme.of(context).colorScheme.outline,
       ),
     );
   }

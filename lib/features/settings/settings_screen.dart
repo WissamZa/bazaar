@@ -1,655 +1,452 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
-import '../../core/constants/app_colors.dart';
 import '../../core/constants/currencies.dart';
-import '../../core/database/dao/item_dao.dart';
-import '../../core/database/dao/store_dao.dart';
-import '../../core/providers/currency_provider.dart';
-import '../../core/providers/locale_provider.dart';
-import '../../core/providers/scraping_provider.dart';
-import '../../core/providers/theme_provider.dart';
-import '../../core/providers/user_provider.dart';
-import '../../core/services/backup_service.dart';
-import '../../core/services/share_service.dart';
-import 'category_settings_screen.dart';
-import 'llm_settings_screen.dart';
+import '../../core/design/app_dimens.dart';
+import '../../core/design/components/section_header.dart';
+import '../../core/models/models.dart';
+import '../../core/providers/database_provider.dart';
+import '../../core/providers/settings_providers.dart';
+import '../../core/services/scraping_config.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../core/router/app_router.dart';
 
-class SettingsScreen extends StatefulWidget {
+/// Settings hub: general, search & AI, data (backup/restore/export/import),
+/// and about.
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
 
-class _SettingsScreenState extends State<SettingsScreen> {
-  bool _busy = false;
-  String _appVersion = 'Loading...';
-
-  @override
-  void initState() {
-    super.initState();
-    _initPackageInfo();
-  }
-
-  Future<void> _initPackageInfo() async {
-    final info = await PackageInfo.fromPlatform();
-    setState(() {
-      _appVersion = info.version;
-    });
-  }
-
-  Future<void> _changeUsername() async {
-    final userProv = context.read<UserProvider>();
-    final ctrl = TextEditingController(text: userProv.username ?? '');
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          context.read<LocaleProvider>().isRtl
-              ? 'تغيير اسم المستخدم'
-              : 'Change username',
-        ),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Username'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (result != null && result.isNotEmpty) {
-      await userProv.set(result);
-    }
-  }
-
-  Future<void> _pickLanguage() async {
-    final locale = context.read<LocaleProvider>();
-    final isRtl = locale.isRtl;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(isRtl ? 'اللغة' : 'Language'),
+    return Scaffold(
+      appBar: AppBar(title: Text(l.settingsTitle)),
+      body: ListView(
+        padding: AppDimens.pagePadding.copyWith(bottom: 32),
         children: [
-          SimpleDialogOption(
-            onPressed: () {
-              locale.set(const Locale('en'));
-              Navigator.pop(ctx);
-            },
-            child: const Text('English'),
+          SectionHeader(
+            l.settingsGeneral,
+            padding: const EdgeInsets.fromLTRB(4, 8, 0, 4),
           ),
-          SimpleDialogOption(
-            onPressed: () {
-              locale.set(const Locale('ar'));
-              Navigator.pop(ctx);
-            },
-            child: const Text('العربية', textDirection: TextDirection.rtl),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _pickTheme() async {
-    final themeProv = context.read<ThemeProvider>();
-    final locale = context.read<LocaleProvider>();
-    final isRtl = locale.isRtl;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(isRtl ? 'السمة' : 'Theme'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () {
-              themeProv.set(ThemeMode.light);
-              Navigator.pop(ctx);
-            },
-            child: Text(isRtl ? 'فاتح' : 'Light'),
-          ),
-          SimpleDialogOption(
-            onPressed: () {
-              themeProv.set(ThemeMode.dark);
-              Navigator.pop(ctx);
-            },
-            child: Text(isRtl ? 'داكن' : 'Dark'),
-          ),
-          SimpleDialogOption(
-            onPressed: () {
-              themeProv.set(ThemeMode.system);
-              Navigator.pop(ctx);
-            },
-            child: Text(isRtl ? 'النظام' : 'System'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _pickCurrency() async {
-    final currencyProv = context.read<CurrencyProvider>();
-    final locale = context.read<LocaleProvider>();
-    final isRtl = locale.isRtl;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(isRtl ? 'اختر العملة' : 'Select Currency'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () {
-              currencyProv.set(AppCurrency.sar);
-              Navigator.pop(ctx);
-            },
-            child: const Text('Saudi Riyal (﷼)'),
-          ),
-          SimpleDialogOption(
-            onPressed: () {
-              currencyProv.set(AppCurrency.usd);
-              Navigator.pop(ctx);
-            },
-            child: const Text('US Dollar (\$)'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ───────────────────────── Data actions ──────────────────────────
-  Future<void> _backup() async {
-    setState(() => _busy = true);
-    try {
-      // SECURITY (Finding 5): Ask the user for an optional passphrase.
-      // If provided, the backup ZIP is encrypted with AES-256-GCM.
-      // If cancelled, the user wants a plain backup.
-      // If "skip" is tapped (empty passphrase), we proceed without encryption.
-      final passphrase = await _askForPassphrase(isRtl: context.read<LocaleProvider>().isRtl);
-      if (passphrase == null) {
-        // User cancelled the entire backup.
-        setState(() => _busy = false);
-        return;
-      }
-      final zip = await BackupService.instance.createBackup(
-        passphrase: passphrase.isEmpty ? null : passphrase,
-      );
-      if (!mounted) return;
-      // share_plus 12+ deprecates Share.shareXFiles in favor of
-      // SharePlus.instance.share(ShareParams(...)). Using the new API.
-      await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(zip.path)],
-          text: 'Bazaar backup ${DateTime.now().toIso8601String()}',
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      _snack('Backup failed: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  /// Returns:
-  ///   null  = user cancelled the entire backup
-  ///   ""    = user wants a plaintext (unencrypted) backup
-  ///   "..." = user wants an encrypted backup with this passphrase
-  Future<String?> _askForPassphrase({required bool isRtl}) async {
-    final ctrl = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isRtl ? 'تأمين النسخة الاحتياطية' : 'Backup passphrase'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isRtl
-                  ? 'أدخل عبارة مرور لتشفير النسخة (اختياري). اتركها فارغة لنسخة غير مشفّرة.'
-                  : 'Enter a passphrase to encrypt the backup (optional). '
-                      'Leave empty for a plaintext backup.',
-              style: Theme.of(context).textTheme.bodySmall,
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: Text(l.username),
+                  subtitle: Text(ref.watch(userProvider) ?? '—'),
+                  onTap: () => _changeUsername(context, ref),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.language),
+                  title: Text(l.language),
+                  subtitle: Text(
+                    ref.watch(localeProvider)?.languageCode == 'ar'
+                        ? 'العربية'
+                        : 'English',
+                  ),
+                  onTap: () => _pickLanguage(context, ref),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.dark_mode_outlined),
+                  title: Text(l.theme),
+                  subtitle: Text(switch (ref.watch(themeProvider)) {
+                    ThemeMode.light => l.themeLight,
+                    ThemeMode.dark => l.themeDark,
+                    ThemeMode.system => l.themeSystem,
+                  }),
+                  onTap: () => _pickTheme(context, ref),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.currency_exchange),
+                  title: Text(l.currency),
+                  subtitle: Text(
+                    ref.watch(currencyProvider) == AppCurrency.sar
+                        ? l.sarCurrency
+                        : l.usdCurrency,
+                  ),
+                  onTap: () => _pickCurrency(context, ref),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.category_outlined),
+                  title: Text(l.manageCategories),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => context.push(Routes.categories),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              obscureText: true,
-              enableSuggestions: false,
-              autocorrect: false,
-              keyboardType: TextInputType.visiblePassword,
-              decoration: InputDecoration(
-                hintText: isRtl ? 'عبارة المرور' : 'Passphrase',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, null),
-            child: Text(isRtl ? 'إلغاء' : 'Cancel'),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, ''),
-            child: Text(isRtl ? 'بدون تشفير' : 'No encryption'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text),
-            child: Text(isRtl ? 'تشفير' : 'Encrypt'),
-          ),
-        ],
-      ),
-    );
-  }
 
-  /// Prompt the user for the passphrase to decrypt an encrypted backup.
-  /// Returns null if the user cancels.
-  Future<String?> _askForRestorePassphrase({required bool isRtl}) async {
-    final ctrl = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isRtl ? 'فك تشفير النسخة' : 'Decrypt backup'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isRtl
-                  ? 'هذه النسخة محمية بعبارة مرور. أدخلها للاستعادة.'
-                  : 'This backup is encrypted. Enter the passphrase to restore it.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              obscureText: true,
-              enableSuggestions: false,
-              autocorrect: false,
-              keyboardType: TextInputType.visiblePassword,
-              decoration: InputDecoration(
-                hintText: isRtl ? 'عبارة المرور' : 'Passphrase',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, null),
-            child: Text(isRtl ? 'إلغاء' : 'Cancel'),
+          SectionHeader(
+            l.settingsSearch,
+            padding: const EdgeInsets.fromLTRB(4, 16, 0, 4),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text),
-            child: Text(isRtl ? 'فك التشفير' : 'Decrypt'),
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.travel_explore),
+                  title: Text(l.searchAndAiTitle),
+                  subtitle: Text(l.searchAndAiHint),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => context.push(Routes.llmSettings),
+                ),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final config = ref.watch(scrapingConfigProvider);
+                    final presence =
+                        ref.watch(keyPresenceProvider).value ??
+                        const KeyPresence.empty();
+                    final complete = config.isConfigComplete(presence);
+                    return ListTile(
+                      leading: Icon(
+                        complete
+                            ? Icons.verified_outlined
+                            : Icons.error_outline,
+                      ),
+                      iconColor: complete
+                          ? theme.colorScheme.secondary
+                          : theme.colorScheme.error,
+                      title: Text(
+                        complete ? l.configComplete : l.configIncomplete,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
-    );
-  }
 
-  Future<void> _restore() async {
-    setState(() => _busy = true);
-    try {
-      final locale = context.read<LocaleProvider>();
-      final isRtl = locale.isRtl;
-      final contents = await BackupService.instance.pickAndRead(
-        passphrasePrompt: () => _askForRestorePassphrase(isRtl: isRtl),
-      );
-      if (contents == null) {
-        setState(() => _busy = false);
-        return;
-      }
-      if (!mounted) return;
-      final restoreItems = ValueNotifier<bool>(true);
-      final restoreStores = ValueNotifier<bool>(true);
-      final restoreLists = ValueNotifier<bool>(true);
+          SectionHeader(
+            l.settingsData,
+            padding: const EdgeInsets.fromLTRB(4, 16, 0, 4),
+          ),
+          Card(
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.backup_outlined),
+                  title: Text(l.createBackup),
+                  subtitle: Text(
+                    l.backupHint,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => _createBackup(context, ref),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.restore),
+                  title: Text(l.restoreBackup),
+                  onTap: () => _restore(context, ref),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.ios_share),
+                  title: Text(l.exportItems),
+                  onTap: () async {
+                    final db = ref.read(databaseProvider);
+                    final rows = await db.itemDao.all();
+                    // ignore: use_build_context_synchronously
+                    await ref
+                        .read(shareServiceProvider)
+                        .exportItems(rows.map((r) => Item.fromRow(r)).toList());
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.store_outlined),
+                  title: Text(l.exportStores),
+                  onTap: () async {
+                    final db = ref.read(databaseProvider);
+                    final rows = await db.storeDao.all();
+                    // ignore: use_build_context_synchronously
+                    await ref
+                        .read(shareServiceProvider)
+                        .exportStores(
+                          rows.map((r) => Store.fromRow(r)).toList(),
+                        );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.download_for_offline_outlined),
+                  title: Text(l.importData),
+                  onTap: () => _importJson(context, ref),
+                ),
+              ],
+            ),
+          ),
 
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title:
-              Text(isRtl ? 'اختر ما تريد استعادته' : 'Select what to restore'),
-          content: StatefulBuilder(
-            builder: (ctx, setS) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
+          SectionHeader(
+            l.settingsAbout,
+            padding: const EdgeInsets.fromLTRB(4, 16, 0, 4),
+          ),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppDimens.space4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ValueListenableBuilder<bool>(
-                    valueListenable: restoreItems,
-                    builder: (_, v, __) => CheckboxListTile(
-                      value: v,
-                      title: Text(
-                        '${isRtl ? "منتجات" : "Items"} (${contents.itemsCount})',
-                      ),
-                      onChanged: (b) {
-                        restoreItems.value = b ?? false;
-                        setS(() {});
-                      },
+                  FutureBuilder<PackageInfo>(
+                    future: PackageInfo.fromPlatform(),
+                    builder: (context, snap) => Text(
+                      '${l.aboutVersion} ${snap.data?.version ?? '…'}',
+                      style: theme.textTheme.titleSmall,
                     ),
                   ),
-                  ValueListenableBuilder<bool>(
-                    valueListenable: restoreStores,
-                    builder: (_, v, __) => CheckboxListTile(
-                      value: v,
-                      title: Text(
-                        '${isRtl ? "متاجر" : "Stores"} (${contents.storesCount})',
-                      ),
-                      onChanged: (b) {
-                        restoreStores.value = b ?? false;
-                        setS(() {});
-                      },
+                  const SizedBox(height: AppDimens.space2),
+                  Text(
+                    l.appTagline,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.primary,
                     ),
                   ),
-                  ValueListenableBuilder<bool>(
-                    valueListenable: restoreLists,
-                    builder: (_, v, __) => CheckboxListTile(
-                      value: v,
-                      title: Text(
-                        '${isRtl ? "قوائم" : "Lists"} (${contents.listsCount})',
-                      ),
-                      onChanged: (b) {
-                        restoreLists.value = b ?? false;
-                        setS(() {});
-                      },
+                  const SizedBox(height: AppDimens.space2),
+                  Text(
+                    l.aboutPrivacy,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: AppDimens.space2),
+                  Text(
+                    l.aboutLicense,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(isRtl ? 'إلغاء' : 'Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(isRtl ? 'استعادة' : 'Restore'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) {
-        setState(() => _busy = false);
-        return;
-      }
-      final summary = await BackupService.instance.restoreSelective(
-        contents,
-        restoreItems: restoreItems.value,
-        restoreStores: restoreStores.value,
-        restoreLists: restoreLists.value,
-      );
-      if (!mounted) return;
-      _snack(
-        isRtl
-            ? 'اكتملت الاستعادة: ${summary.items} منتج، ${summary.stores} متجر، ${summary.lists} قائمة'
-                '${summary.skipped > 0 ? " (تم تخطّي ${summary.skipped})" : ""}'
-            : 'Restore complete: ${summary.items} items, ${summary.stores} stores, ${summary.lists} lists'
-                '${summary.skipped > 0 ? " (${summary.skipped} skipped)" : ""}',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      _snack('Restore failed: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _import() async {
-    setState(() => _busy = true);
-    try {
-      final summary = await ShareService.instance.importFromFile();
-      if (summary.cancelled) {
-        setState(() => _busy = false);
-        return;
-      }
-      if (!mounted) return;
-      final locale = context.read<LocaleProvider>();
-      _snack(
-        locale.isRtl
-            ? 'اكتمل الاستيراد: ${summary.count} عنصر (${summary.type})'
-            : 'Import complete: ${summary.count} (${summary.type})',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      _snack('Import failed: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _exportItems() async {
-    setState(() => _busy = true);
-    try {
-      await ShareService.instance.exportItems(await ItemDao.instance.all());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _exportStores() async {
-    setState(() => _busy = true);
-    try {
-      await ShareService.instance.exportStores(await StoreDao.instance.all());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  void _snack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final locale = context.watch<LocaleProvider>();
-    final themeProv = context.watch<ThemeProvider>();
-    final currencyProv = context.watch<CurrencyProvider>();
-    final userProv = context.watch<UserProvider>();
-    // Watch scraping provider so the subtitle updates live when strategy changes.
-    final scraping = context.watch<ScrapingProvider>();
-    final isRtl = locale.isRtl;
-
-    // Build a short status line for the search/AI tile.
-    final strategyLabel =
-        scraping.strategy.displayName(isRtl ? 'ar' : 'en');
-    final configOk = scraping.isConfigComplete;
-    final statusText = configOk
-        ? strategyLabel
-        : (isRtl
-            ? 'غير مكتمل — اضغط للإعداد'
-            : 'Incomplete — tap to configure');
-
-    return Scaffold(
-      appBar: AppBar(title: Text(isRtl ? 'الإعدادات' : 'Settings')),
-      body: ListView(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.category_outlined),
-            title: Text(isRtl ? 'تصنيفات المنتجات' : 'Item Categories'),
-            onTap: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const CategorySettingsScreen(),
-                ),
-              );
-            },
-          ),
-
-          // ─────────────────────────────────────────────────────────────
-          // NEW: Search & AI settings entry point
-          // ─────────────────────────────────────────────────────────────
-          const Divider(),
-          _SectionHeader(isRtl ? 'البحث والذكاء الاصطناعي' : 'Search & AI'),
-          ListTile(
-            leading: Icon(
-              configOk ? Icons.psychology : Icons.psychology_outlined,
-              color: configOk
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.error,
-            ),
-            title: Text(isRtl
-                ? 'إعدادات البحث و LLM'
-                : 'Search & LLM settings'),
-            subtitle: Text(
-              statusText,
-              style: TextStyle(
-                color: configOk ? null : Theme.of(context).colorScheme.error,
               ),
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const LlmSettingsScreen(),
-                ),
-              );
-            },
-          ),
-
-          const Divider(),
-          _SectionHeader(isRtl ? 'عام' : 'General'),
-          ListTile(
-            leading: const Icon(Icons.person_outline),
-            title: Text(isRtl ? 'اسم المستخدم' : 'Username'),
-            subtitle: Text(userProv.username ?? '—'),
-            onTap: _changeUsername,
-          ),
-          ListTile(
-            leading: const Icon(Icons.language),
-            title: Text(isRtl ? 'اللغة' : 'Language'),
-            subtitle: Text(isRtl ? 'العربية' : 'English'),
-            onTap: _pickLanguage,
-          ),
-          ListTile(
-            leading:
-                Icon(themeProv.isDark ? Icons.dark_mode : Icons.light_mode),
-            title: Text(isRtl ? 'السمة' : 'Theme'),
-            subtitle: Text(
-              themeProv.isDark
-                  ? (isRtl ? 'داكن' : 'Dark')
-                  : (isRtl ? 'فاتح' : 'Light'),
-            ),
-            onTap: _pickTheme,
-          ),
-          ListTile(
-            leading: const Icon(Icons.attach_money),
-            title: Text(isRtl ? 'العملة' : 'Currency'),
-            subtitle: Text(
-              currencyProv.currency == AppCurrency.sar
-                  ? 'Saudi Riyal (﷼)'
-                  : 'US Dollar (\$)',
-            ),
-            onTap: _pickCurrency,
-          ),
-          const Divider(),
-          _SectionHeader(isRtl ? 'إدارة البيانات' : 'Data Management'),
-          ListTile(
-            leading: _busy
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.backup_outlined),
-            title: Text(isRtl ? 'نسخ احتياطي' : 'Backup'),
-            subtitle: Text(
-              isRtl ? 'أنشئ ملف zip وشاركه' : 'Create a zip file and share it',
-            ),
-            onTap: _busy ? null : _backup,
-          ),
-          ListTile(
-            leading: _busy
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.restore),
-            title: Text(isRtl ? 'استعادة' : 'Restore'),
-            subtitle: Text(
-              isRtl
-                  ? 'اختر ملف zip للاستعادة'
-                  : 'Pick a zip file to restore from',
-            ),
-            onTap: _busy ? null : _restore,
-          ),
-          ListTile(
-            leading: _busy
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.download),
-            title: Text(isRtl ? 'استيراد JSON' : 'Import JSON'),
-            subtitle: Text(
-              isRtl
-                  ? 'استيراد منتجات/قوائم/متاجر'
-                  : 'Import items / lists / stores',
-            ),
-            onTap: _busy ? null : _import,
-          ),
-          ListTile(
-            leading: const Icon(Icons.upload),
-            title: Text(isRtl ? 'تصدير المنتجات' : 'Export Items'),
-            onTap: _busy ? null : _exportItems,
-          ),
-          ListTile(
-            leading: const Icon(Icons.upload),
-            title: Text(isRtl ? 'تصدير المتاجر' : 'Export Stores'),
-            onTap: _busy ? null : _exportStores,
-          ),
-          const Divider(),
-          _SectionHeader(isRtl ? 'حول' : 'About'),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: Text(isRtl ? 'الإصدار' : 'Version'),
-            subtitle: Text(_appVersion),
-          ),
-          ListTile(
-            leading: const Icon(Icons.code),
-            title: Text(
-              isRtl ? 'بازار — تطبيق محلي بالكامل' : 'Bazaar — fully local app',
-            ),
-            subtitle: Text(
-              isRtl
-                  ? 'لا خادم، لا حساب، خصوصية كاملة'
-                  : 'No server, no account, full privacy',
             ),
           ),
         ],
       ),
     );
   }
-}
 
-class _SectionHeader extends StatelessWidget {
-  final String text;
-  const _SectionHeader(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Text(
-        text.toUpperCase(),
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: isDark ? AppColors.darkAccent : AppColors.lightPrimary,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
+  // ── Dialogs ─────────────────────────────────────────────────────────────
+  Future<void> _changeUsername(BuildContext context, WidgetRef ref) async {
+    final l = AppLocalizations.of(context)!;
+    final controller = TextEditingController(text: ref.read(userProvider));
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.changeUsername),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          onSubmitted: (v) => Navigator.of(context).pop(v),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: Text(l.commonSave),
+          ),
+        ],
       ),
     );
+    controller.dispose();
+    if (name == null) return;
+    await ref.read(userProvider.notifier).set(name.trim());
+  }
+
+  Future<void> _pickLanguage(BuildContext context, WidgetRef ref) async {
+    final l = AppLocalizations.of(context)!;
+    final current = ref.read(localeProvider)?.languageCode;
+    final chosen = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(l.language),
+        children: [
+          for (final entry in {'en': 'English', 'ar': 'العربية'}.entries)
+            RadioListTile<String>(
+              value: entry.key,
+              groupValue: current,
+              title: Text(entry.value),
+              onChanged: (v) => Navigator.of(context).pop(v),
+            ),
+        ],
+      ),
+    );
+    if (chosen == null) return;
+    await ref.read(localeProvider.notifier).set(Locale(chosen));
+  }
+
+  Future<void> _pickTheme(BuildContext context, WidgetRef ref) async {
+    final l = AppLocalizations.of(context)!;
+    final current = ref.read(themeProvider);
+    final chosen = await showDialog<ThemeMode>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(l.theme),
+        children: [
+          for (final mode in [
+            (ThemeMode.system, l.themeSystem),
+            (ThemeMode.light, l.themeLight),
+            (ThemeMode.dark, l.themeDark),
+          ])
+            RadioListTile<ThemeMode>(
+              value: mode.$1,
+              groupValue: current,
+              title: Text(mode.$2),
+              onChanged: (v) => Navigator.of(context).pop(v),
+            ),
+        ],
+      ),
+    );
+    if (chosen == null) return;
+    await ref.read(themeProvider.notifier).set(chosen);
+  }
+
+  Future<void> _pickCurrency(BuildContext context, WidgetRef ref) async {
+    final l = AppLocalizations.of(context)!;
+    final current = ref.read(currencyProvider);
+    final chosen = await showDialog<AppCurrency>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(l.currency),
+        children: [
+          RadioListTile<AppCurrency>(
+            value: AppCurrency.sar,
+            groupValue: current,
+            title: Text(l.sarCurrency),
+            onChanged: (v) => Navigator.of(context).pop(v),
+          ),
+          RadioListTile<AppCurrency>(
+            value: AppCurrency.usd,
+            groupValue: current,
+            title: Text(l.usdCurrency),
+            onChanged: (v) => Navigator.of(context).pop(v),
+          ),
+        ],
+      ),
+    );
+    if (chosen == null) return;
+    await ref.read(currencyProvider.notifier).set(chosen);
+  }
+
+  // ── Data actions ────────────────────────────────────────────────────────
+  Future<void> _createBackup(BuildContext context, WidgetRef ref) async {
+    final l = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    final passphrase = await _askPassphrase(context, optional: true);
+    if (passphrase == null) return; // cancelled
+    try {
+      final file = await ref
+          .read(backupServiceProvider)
+          .createBackup(passphrase: passphrase.isEmpty ? null : passphrase);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)], text: l.backupCreated),
+      );
+      messenger.showSnackBar(SnackBar(content: Text(l.backupCreated)));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('${l.backupFailed}: $e')));
+    }
+  }
+
+  Future<void> _restore(BuildContext context, WidgetRef ref) async {
+    final l = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final contents = await ref
+          .read(backupServiceProvider)
+          .pickAndRead(
+            passphrasePrompt: () => _askPassphrase(context, optional: false),
+          );
+      if (contents == null) return;
+      final summary = await ref
+          .read(backupServiceProvider)
+          .restoreSelective(contents);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            l.restoreComplete(
+              summary.items,
+              summary.stores,
+              summary.lists,
+              summary.skipped,
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('${l.restoreFailed}: $e')));
+    }
+  }
+
+  Future<void> _importJson(BuildContext context, WidgetRef ref) async {
+    final l = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final summary = await ref.read(shareServiceProvider).importFromFile();
+      if (summary.cancelled) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text(l.importComplete(summary.count))),
+      );
+    } on FormatException {
+      messenger.showSnackBar(SnackBar(content: Text(l.importUnknownType)));
+    } on StateError catch (e) {
+      if (e.message.contains('too large')) {
+        messenger.showSnackBar(SnackBar(content: Text(l.importTooLarge)));
+      } else {
+        messenger.showSnackBar(
+          SnackBar(content: Text('${l.importFailed}: $e')),
+        );
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('${l.importFailed}: $e')));
+    }
+  }
+
+  /// Returns '' for skip-encryption, a passphrase, or null when cancelled.
+  Future<String?> _askPassphrase(
+    BuildContext context, {
+    required bool optional,
+  }) async {
+    final l = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.backupPassphrase),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (optional)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(l.backupPassphraseHint),
+              ),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              autofocus: true,
+              onSubmitted: (v) => Navigator.of(context).pop(v),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: Text(l.continueLabel),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
   }
 }

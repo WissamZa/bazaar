@@ -1,486 +1,227 @@
-import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform, Process;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers/locale_provider.dart';
-import '../../core/providers/scraping_provider.dart';
+import '../../core/design/app_dimens.dart';
+import '../../core/design/app_typography.dart';
+import '../../core/providers/database_provider.dart';
+import '../../core/providers/settings_providers.dart';
+import '../../core/services/scraping_config.dart';
 import '../../core/services/scraper_service.dart';
+import '../../l10n/generated/app_localizations.dart';
 
-/// Pipeline Debugger — lets the user enter a barcode and see EXACTLY what
-/// each tier of the scraper returned. Useful for:
-///   - Verifying the on-device LLM actually works (vs. just trusting the
-///     final result)
-///   - Comparing the app's extraction to a manual browser search
-///   - Figuring out why a particular barcode "returns nothing"
-class PipelineDebuggerScreen extends StatefulWidget {
+/// Pipeline debugger: run one barcode through every tier and inspect what
+/// each returned. Pure observability — nothing is written to the DB.
+class PipelineDebuggerScreen extends ConsumerStatefulWidget {
   const PipelineDebuggerScreen({super.key});
 
   @override
-  State<PipelineDebuggerScreen> createState() => _PipelineDebuggerScreenState();
+  ConsumerState<PipelineDebuggerScreen> createState() =>
+      _PipelineDebuggerScreenState();
 }
 
-class _PipelineDebuggerScreenState extends State<PipelineDebuggerScreen> {
-  final _barcodeCtrl = TextEditingController();
+class _PipelineDebuggerScreenState
+    extends ConsumerState<PipelineDebuggerScreen> {
+  final _barcodeController = TextEditingController();
   bool _running = false;
   PipelineDebugResult? _result;
 
   @override
   void dispose() {
-    _barcodeCtrl.dispose();
+    _barcodeController.dispose();
     super.dispose();
   }
 
   Future<void> _run() async {
-    final barcode = _barcodeCtrl.text.trim();
-    if (barcode.isEmpty) return;
-    setState(() {
-      _running = true;
-      _result = null;
-    });
+    final barcode = _barcodeController.text.trim();
+    if (barcode.isEmpty || _running) return;
+    setState(() => _running = true);
     try {
-      final result =
-          await ScraperService.instance.debugPipeline(barcode);
-      if (!mounted) return;
-      setState(() => _result = result);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      // Sync the live provider config into the singleton service first.
+      ref.read(scrapingConfigProvider);
+      final result = await ScraperService.instance.debugPipeline(barcode);
+      if (mounted) setState(() => _result = result);
     } finally {
       if (mounted) setState(() => _running = false);
     }
   }
 
-  Future<void> _openInBrowser(String? url) async {
-    if (url == null || url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-
-    // Desktop platforms: spawn the system URL opener via dart:io.
-    // No extra Flutter plugin dependency required.
-    if (!kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows)) {
-      String cmd;
-      List<String> args;
-      if (Platform.isLinux) {
-        cmd = 'xdg-open';
-        args = [url];
-      } else if (Platform.isMacOS) {
-        cmd = 'open';
-        args = [url];
-      } else {
-        // Windows: `start` is a cmd builtin so we have to run it through cmd.
-        cmd = 'cmd';
-        args = ['/c', 'start', '', url];
-      }
-      try {
-        final result = await Process.run(cmd, args);
-        if (result.exitCode != 0) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Could not open browser ($cmd exit ${result.exitCode}): '
-                '${result.stderr}'.trim(),
-              ),
-              action: SnackBarAction(
-                label: 'Copy URL',
-                onPressed: () =>
-                    Clipboard.setData(ClipboardData(text: url)),
-              ),
-            ),
-          );
-        }
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Cannot launch $cmd: $e'),
-            action: SnackBarAction(
-              label: 'Copy URL',
-              onPressed: () =>
-                  Clipboard.setData(ClipboardData(text: url)),
-            ),
-          ),
-        );
-      }
-      return;
-    }
-
-    // Mobile / Web: copy to clipboard and prompt the user to paste in a
-    // browser. (We could add url_launcher as a dependency for native mobile
-    // launching, but that adds a plugin + native setup for what's a rare
-    // debug-only action.)
-    await Clipboard.setData(ClipboardData(text: url));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('URL copied to clipboard — paste it in your browser:\n$url'),
-        duration: const Duration(seconds: 6),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final locale = context.watch<LocaleProvider>();
-    final isRtl = locale.isRtl;
-    final scraping = context.watch<ScrapingProvider>();
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(isRtl ? 'تنقيح خط الأنابيب' : 'Pipeline Debugger'),
-      ),
-      body: Column(
+      appBar: AppBar(title: Text(l.pipelineDebugger)),
+      body: ListView(
+        padding: AppDimens.pagePadding.copyWith(bottom: 32),
         children: [
-          // ── Barcode input ─────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _barcodeCtrl,
-                    decoration: InputDecoration(
-                      labelText: isRtl ? 'الباركود' : 'Barcode',
-                      hintText: 'e.g. 6970530854708',
-                      prefixIcon: const Icon(Icons.barcode_reader),
-                      border: const OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                    onSubmitted: (_) => _run(),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _barcodeController,
+                  keyboardType: TextInputType.number,
+                  style: AppTypography.mono(context, size: 14),
+                  onSubmitted: (_) => _run(),
+                  decoration: InputDecoration(
+                    labelText: l.pipelineBarcodeField,
+                    border: const OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
+              ),
+              const SizedBox(width: AppDimens.space2),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: FilledButton(
                   onPressed: _running ? null : _run,
-                  icon: _running
+                  child: _running
                       ? const SizedBox(
-                          width: 16,
-                          height: 16,
+                          width: 18,
+                          height: 18,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.play_arrow),
-                  label: Text(isRtl ? 'تشغيل' : 'Run'),
+                      : Text(l.runPipeline),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-
-          // ── Current strategy banner ───────────────────────────────────
-          Container(
-            width: double.infinity,
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                Icon(Icons.settings_outlined,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-                const SizedBox(width: 8),
-                Expanded(
+          if (_result != null) ...[
+            const SizedBox(height: AppDimens.space4),
+            // Final result
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppDimens.space4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l.pipelineFinalResult,
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: AppDimens.space2),
+                    if (_result!.finalProduct != null) ...[
+                      Text(
+                        _result!.finalProduct!.name,
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      if (_result!.finalProduct!.brand != null)
+                        Text(_result!.finalProduct!.brand!),
+                      if (_result!.finalProduct!.price != null)
+                        Text(
+                          '${_result!.finalProduct!.price} ${_result!.finalProduct!.currency}',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      Text(
+                        _result!.finalProduct!.source,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ] else
+                      Text(l.scanResultNotFound),
+                  ],
+                ),
+              ),
+            ),
+            // Steps
+            for (final step in _result!.steps) _StepCard(step: step),
+            if (_result!.browserCompareUrl != null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppDimens.space3),
+                child: Center(
                   child: Text(
-                    isRtl
-                        ? 'الاستراتيجية الحالية: ${scraping.strategy.displayName('ar')}'
-                        : 'Current strategy: ${scraping.strategy.displayName('en')}',
-                    style: Theme.of(context).textTheme.bodySmall,
+                    '${l.pipelineOpenInBrowser} · ${_result!.totalDuration.inMilliseconds} ms',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-
-          const Divider(height: 1),
-
-          // ── Result ────────────────────────────────────────────────────
-          Expanded(
-            child: _result == null
-                ? _buildEmptyState(isRtl)
-                : _buildResult(isRtl),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(bool isRtl) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.bug_report_outlined,
-                size: 64, color: Theme.of(context).colorScheme.outline),
-            const SizedBox(height: 16),
-            Text(
-              isRtl
-                  ? 'أدخل باركود واضغط تشغيل لرؤية كل خطوة'
-                  : 'Enter a barcode and tap Run to see every step',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isRtl
-                  ? 'مفيد للتأكد من أن LLM المحلي يعمل، أو لمعرفة لماذا يفشل بحث معين'
-                  : 'Useful to verify the on-device LLM is working, or to find out why a specific lookup fails',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+              ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResult(bool isRtl) {
-    final r = _result!;
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        // ── Final result card ──────────────────────────────────────────
-        _FinalResultCard(result: r, isRtl: isRtl),
-        const SizedBox(height: 12),
-
-        // ── Open in browser button ─────────────────────────────────────
-        if (r.browserCompareUrl != null)
-          FilledButton.tonalIcon(
-            onPressed: () => _openInBrowser(r.browserCompareUrl),
-            icon: const Icon(Icons.open_in_browser),
-            label: Text(isRtl
-                ? 'افتح نفس البحث في المتصفح للمقارنة'
-                : 'Open same search in browser to compare'),
-          ),
-        const SizedBox(height: 12),
-
-        // ── Steps breakdown ────────────────────────────────────────────
-        Text(
-          isRtl ? 'تفصيل الخطوات' : 'Steps breakdown',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        const SizedBox(height: 8),
-        for (int i = 0; i < r.steps.length; i++)
-          _StepCard(step: r.steps[i], index: i + 1, isRtl: isRtl),
-
-        const SizedBox(height: 24),
-        // ── SearXNG raw results ────────────────────────────────────────
-        if (r.searxngResults.isNotEmpty) ...[
-          Text(
-            isRtl ? 'نتائج SearXNG الخام' : 'Raw SearXNG results',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 8),
-          for (int i = 0; i < r.searxngResults.length; i++)
-            _SearxngResultCard(
-              result: r.searxngResults[i],
-              index: i + 1,
-              onTap: () => _openInBrowser(
-                  r.searxngResults[i]['url'] as String?),
-            ),
-        ],
-      ],
-    );
-  }
-}
-
-// ───────────────────────────────────────────────────────────────────────────
-// Final result card
-// ───────────────────────────────────────────────────────────────────────────
-class _FinalResultCard extends StatelessWidget {
-  final PipelineDebugResult result;
-  final bool isRtl;
-  const _FinalResultCard({required this.result, required this.isRtl});
-
-  @override
-  Widget build(BuildContext context) {
-    final p = result.finalProduct;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.celebration_outlined,
-                    color: p != null
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(context).colorScheme.error),
-                const SizedBox(width: 8),
-                Text(
-                  isRtl ? 'النتيجة النهائية' : 'Final result',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const Spacer(),
-                Text(
-                  '${result.totalDuration.inMilliseconds} ms',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-            const Divider(),
-            if (p == null)
-              Text(
-                isRtl ? 'لم يُعثر على شيء' : 'Nothing found',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.error),
-              )
-            else ...[
-              _kv('Name', p.name),
-              if (p.brand != null) _kv('Brand', p.brand!),
-              if (p.nameAr != null) _kv('Name (AR)', p.nameAr!),
-              _kv('Price',
-                  p.price == null ? '—' : '${p.currency} ${p.price}'),
-              _kv('Source', p.source),
-              if (p.imageUrl != null)
-                _kv('Image', p.imageUrl!, copyable: true),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _kv(String k, String v, {bool copyable = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(k,
-                style: const TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          Expanded(child: Text(v)),
-          if (copyable)
-            IconButton(
-              icon: const Icon(Icons.copy, size: 14),
-              onPressed: () => Clipboard.setData(ClipboardData(text: v)),
-              tooltip: 'Copy',
-              visualDensity: VisualDensity.compact,
-            ),
         ],
       ),
     );
   }
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// Step card
-// ───────────────────────────────────────────────────────────────────────────
 class _StepCard extends StatelessWidget {
   final PipelineDebugStep step;
-  final int index;
-  final bool isRtl;
-  const _StepCard(
-      {required this.step, required this.index, required this.isRtl});
+
+  const _StepCard({required this.step});
+
+  Color _color(BuildContext context) {
+    final theme = Theme.of(context);
+    return switch (step.status) {
+      PipelineStepStatus.success => theme.colorScheme.secondary,
+      PipelineStepStatus.noData => theme.colorScheme.tertiary,
+      PipelineStepStatus.failed => theme.colorScheme.error,
+      PipelineStepStatus.skipped => theme.colorScheme.onSurfaceVariant,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (step.status) {
-      PipelineStepStatus.success => Colors.green,
-      PipelineStepStatus.noData => Colors.orange,
-      PipelineStepStatus.failed => Colors.red,
-      PipelineStepStatus.skipped => Colors.grey,
-    };
-    final icon = switch (step.status) {
-      PipelineStepStatus.success => Icons.check_circle,
-      PipelineStepStatus.noData => Icons.remove_circle_outline,
-      PipelineStepStatus.failed => Icons.error,
-      PipelineStepStatus.skipped => Icons.skip_next,
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final statusLabel = switch (step.status) {
+      PipelineStepStatus.success => l.statusSuccess,
+      PipelineStepStatus.noData => l.statusNoData,
+      PipelineStepStatus.failed => l.statusFailed,
+      PipelineStepStatus.skipped => l.statusSkipped,
     };
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(top: AppDimens.space2),
+      clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
-        leading: Icon(icon, color: color, size: 20),
-        title: Text(step.name,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-        subtitle: Text(
-          '${step.status.label} · ${step.duration.inMilliseconds} ms'
-          '${step.error != null ? ' · ${step.error}' : ''}',
-          style: TextStyle(fontSize: 11, color: color),
+        initiallyExpanded: step.status == PipelineStepStatus.failed,
+        title: Row(
+          children: [
+            Icon(Icons.circle, size: 10, color: _color(context)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                step.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+          ],
         ),
+        subtitle: Text(
+          '$statusLabel · ${step.duration.inMilliseconds} ms',
+          style: theme.textTheme.bodySmall?.copyWith(color: _color(context)),
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
         children: [
+          if (step.error != null)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                step.error!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ),
           if (step.data != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: _buildData(context, step.data!),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SelectableText(
+                const JsonEncoder.withIndent('  ').convert(step.data),
+                style: AppTypography.mono(context, size: 11),
+              ),
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildData(BuildContext context, Map<String, dynamic> data) {
-    final pretty = const JsonEncoder.withIndent('  ').convert(data);
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        // Use theme-aware colors so the JSON is readable in both light and
-        // dark mode. The old `Colors.grey.shade100` produced white-on-white
-        // text in dark mode.
-        color: isDark
-            ? theme.colorScheme.surfaceContainerHighest
-            : theme.colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant,
-          width: 0.5,
-        ),
-      ),
-      child: SelectableText(
-        pretty,
-        style: TextStyle(
-          fontFamily: 'RobotoMono',
-          fontSize: 11,
-          // Use theme.onSurface so the text adapts: dark text on light bg,
-          // light text on dark bg.
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-    );
-  }
-}
-
-// ───────────────────────────────────────────────────────────────────────────
-// SearXNG result card
-// ───────────────────────────────────────────────────────────────────────────
-class _SearxngResultCard extends StatelessWidget {
-  final Map<String, dynamic> result;
-  final int index;
-  final VoidCallback onTap;
-  const _SearxngResultCard(
-      {required this.result, required this.index, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final title = result['title'] as String? ?? '(no title)';
-    final url = result['url'] as String? ?? '';
-    final engine = result['engine'] as String? ?? '';
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListTile(
-        leading: CircleAvatar(
-          radius: 12,
-          child: Text('$index', style: const TextStyle(fontSize: 11)),
-        ),
-        title: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: Text(url, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: engine.isEmpty
-            ? null
-            : Chip(label: Text(engine, style: const TextStyle(fontSize: 10))),
-        onTap: onTap,
       ),
     );
   }

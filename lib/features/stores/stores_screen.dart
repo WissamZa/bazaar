@@ -1,163 +1,108 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../core/database/dao/store_dao.dart';
-import '../../core/models/store.dart';
-import '../../core/providers/locale_provider.dart';
-import '../../widgets/empty_state.dart';
-import 'add_edit_store_screen.dart';
-import 'store_detail_screen.dart';
+import '../../core/design/app_dimens.dart';
+import '../../core/design/components/app_image.dart';
+import '../../core/design/components/empty_state.dart';
+import '../../core/design/components/swipe_to_delete.dart';
+import '../../core/providers/data_providers.dart';
+import '../../core/providers/database_provider.dart';
+import '../../core/providers/settings_providers.dart';
+import '../../core/models/models.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../core/router/app_router.dart';
 
-class StoresScreen extends StatefulWidget {
+/// Store list with swipe-to-delete and live item counts.
+class StoresScreen extends ConsumerWidget {
   const StoresScreen({super.key});
 
   @override
-  State<StoresScreen> createState() => _StoresScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final stores = ref.watch(storesStreamProvider);
 
-class _StoresScreenState extends State<StoresScreen> {
-  List<Store> _stores = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _refresh();
-  }
-
-  Future<void> _refresh() async {
-    setState(() => _loading = true);
-    _stores = await StoreDao.instance.all();
-    if (!mounted) return;
-    setState(() => _loading = false);
-  }
-
-  Future<void> _openAddEdit({Store? store}) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => AddEditStoreScreen(store: store)),
-    );
-    _refresh();
-  }
-
-  /// Show address (preferred) or website as the subtitle. If both are empty
-  /// returns null so the ListTile collapses to a single line.
-  Widget? _storeSubtitle(Store store, bool isRtl) {
-    final parts = <String>[];
-    if ((store.address ?? '').isNotEmpty) parts.add(store.address!);
-    if ((store.website ?? '').isNotEmpty) parts.add(store.website!);
-    if (parts.isEmpty) return null;
-    return Text(
-      parts.join(' · '),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final locale = context.watch<LocaleProvider>();
     return Scaffold(
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _stores.isEmpty
-              ? EmptyState(
-                  icon: Icons.storefront_outlined,
-                  title: locale.isRtl ? 'لا توجد متاجر بعد' : 'No stores yet',
-                  hint: locale.isRtl
-                      ? 'أضف متجراً لتتبع الأسعار'
-                      : 'Add a store to track prices',
-                  actionLabel: locale.isRtl ? 'متجر جديد' : 'New Store',
-                  onAction: () => _openAddEdit(),
-                )
-              : RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: ListView.builder(
-                    itemCount: _stores.length,
-                    itemBuilder: (_, i) {
-                      final store = _stores[i];
-                      return Dismissible(
-                        key: ValueKey(store.id ?? i),
-                        background: Container(
-                          color: Colors.red,
-                          alignment: Alignment.centerRight,
-                          padding: const EdgeInsets.only(right: 24),
-                          child: const Icon(Icons.delete, color: Colors.white),
+      appBar: AppBar(title: Text(l.storesTitle)),
+      body: stores.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('$e')),
+        data: (rows) {
+          if (rows.isEmpty) {
+            return EmptyState(
+              icon: Icons.storefront_outlined,
+              title: l.noStores,
+              hint: l.noStoresHint,
+              actionLabel: l.newStore,
+              onAction: () => context.push('/stores/new'),
+            );
+          }
+          return ListView.builder(
+            padding: AppDimens.pagePadding.copyWith(bottom: 96),
+            itemCount: rows.length,
+            itemBuilder: (context, i) {
+              final store = rows[i];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: AppDimens.space2),
+                child: SwipeToDelete(
+                  confirmTitle: l.deleteStoreTitle,
+                  confirmMessage: l.deleteStoreMessage(
+                    store.displayName(
+                      ref.read(localeProvider.notifier).effectiveCode,
+                    ),
+                  ),
+                  onConfirmed: () async {
+                    await ref
+                        .read(databaseProvider)
+                        .storeDao
+                        .deleteStore(store.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(l.storeDeleted)));
+                    }
+                  },
+                  child: Card(
+                    child: ListTile(
+                      onTap: () => context.push(Routes.store(store.id)),
+                      leading: AppImage(
+                        url: store.imageUrl,
+                        size: AppDimens.storeAvatar,
+                        fallbackIcon: Icons.storefront_outlined,
+                      ),
+                      title: Text(
+                        store.displayName(
+                          ref.read(localeProvider.notifier).effectiveCode,
                         ),
-                        direction: DismissDirection.endToStart,
-                        confirmDismiss: (_) async {
-                          return await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  title: Text(
-                                    locale.isRtl
-                                        ? 'تأكيد الحذف؟'
-                                        : 'Confirm delete?',
-                                  ),
-                                  content: Text(
-                                    locale.isRtl
-                                        ? 'لا يمكن التراجع عن هذا الإجراء.'
-                                        : 'This action cannot be undone.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(ctx, false),
-                                      child: Text(
-                                        locale.isRtl ? 'إلغاء' : 'Cancel',
-                                      ),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () => Navigator.pop(ctx, true),
-                                      child:
-                                          Text(locale.isRtl ? 'حذف' : 'Delete'),
-                                    ),
-                                  ],
-                                ),
-                              ) ??
-                              false;
-                        },
-                        onDismissed: (_) async {
-                          await StoreDao.instance.delete(store.id!);
-                          _stores.removeAt(i);
-                          setState(() {});
-                        },
-                        child: Card(
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .primaryContainer,
-                              child: Icon(
-                                Icons.storefront,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onPrimaryContainer,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle:
+                          (store.website != null && store.website!.isNotEmpty)
+                          ? Text(
+                              store.website!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
                               ),
-                            ),
-                            title: Text(
-                              store.displayName(
-                                locale.locale?.languageCode ?? 'en',
-                              ),
-                            ),
-                            subtitle: _storeSubtitle(store, locale.isRtl),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => StoreDetailScreen(store: store),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                            )
+                          : null,
+                      trailing: const Icon(Icons.chevron_right, size: 20),
+                    ),
                   ),
                 ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _openAddEdit(),
-        child: const Icon(Icons.add),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'stores-fab',
+        onPressed: () => context.push('/stores/new'),
+        icon: const Icon(Icons.add),
+        label: Text(l.newStore),
       ),
     );
   }

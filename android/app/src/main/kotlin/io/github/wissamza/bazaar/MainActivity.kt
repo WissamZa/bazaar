@@ -23,12 +23,17 @@ import io.flutter.plugin.common.MethodChannel
  *      channel.
  *   3. Handles `onNewIntent` for the case where the activity is already
  *      running (warm start).
+ *   4. Exposes `getDatabasePath` on the `bazaar/platform` channel so the
+ *      Dart/Drift layer opens the SAME SQLite file the v1 sqflite code used
+ *      (`/data/data/<pkg>/databases/bazaar.db`) — v1 installs upgrade in
+ *      place with zero migration.
  *
  * The Dart side (in `lib/main.dart`) listens on the same channel and calls
  * `ShareService.importFromFile(path)` with the received file path.
  */
 class MainActivity : FlutterActivity() {
     private val kChannelName = "receive_sharing_intent"
+    private val kPlatformChannelName = "io.github.wissamza.bazaar/platform"
     private var initialIntent: Intent? = null
     private var methodChannel: MethodChannel? = null
 
@@ -55,6 +60,16 @@ class MainActivity : FlutterActivity() {
                     }
                     else -> result.notImplemented()
                 }
+            }
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger,
+            kPlatformChannelName).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getDatabasePath" -> {
+                    val name = call.argument<String>("name") ?: "bazaar.db"
+                    result.success(getDatabasePath(name).absolutePath)
+                }
+                else -> result.notImplemented()
             }
         }
     }
