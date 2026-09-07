@@ -1,352 +1,318 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/constants/currencies.dart';
-import '../../core/database/dao/item_dao.dart';
-import '../../core/models/item.dart';
-import '../../core/providers/locale_provider.dart';
+import '../../core/design/app_dimens.dart';
+import '../../core/design/components/app_image.dart';
+import '../../core/design/components/empty_state.dart';
+import '../../core/design/components/price_text.dart';
+import '../../core/design/components/section_header.dart';
+import '../../core/design/components/status_chip.dart';
+import '../../core/providers/data_providers.dart';
+import '../../core/providers/database_provider.dart';
+import '../../core/providers/settings_providers.dart';
 import '../../core/services/barcode_service.dart';
+import '../../core/services/scraping_config.dart';
 import '../../core/services/scraper_service.dart';
-import '../items/add_edit_item_screen.dart';
+import '../../core/models/models.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../core/router/app_router.dart';
 
-/// Result of a barcode scan. Looks up local DB first, falls back to online
-/// scraping, and offers the user a way to save a new item or open an existing
-/// one. The user can choose which online source to query (Open Food Facts,
-/// Amazon SA, Noon, Panda, Carrefour SA) or run the full "Auto" chain.
-class ScanResultScreen extends StatefulWidget {
-  final String code;
-  const ScanResultScreen({super.key, required this.code});
+/// Barcode lookup result: local hit, online hit, or not found. Lets the
+/// user pick a specific source, then add the product to items or the
+/// active list.
+class ScanResultScreen extends ConsumerStatefulWidget {
+  final String barcode;
+  final int? listId;
+
+  const ScanResultScreen({super.key, required this.barcode, this.listId});
 
   @override
-  State<ScanResultScreen> createState() => _ScanResultScreenState();
+  ConsumerState<ScanResultScreen> createState() => _ScanResultScreenState();
 }
 
-class _ScanResultScreenState extends State<ScanResultScreen> {
-  bool _loading = true;
-  BarcodeLookup? _lookup;
+class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
   LookupSource _source = LookupSource.auto;
+  bool _loading = true;
+  bool _saving = false;
+  BarcodeLookup? _result;
+  final _cancel = CancelToken();
 
   @override
   void initState() {
     super.initState();
-    _doLookup();
+    _lookup();
   }
 
-  Future<void> _doLookup() async {
+  @override
+  void dispose() {
+    _cancel.cancel();
+    super.dispose();
+  }
+
+  Future<void> _lookup() async {
     setState(() => _loading = true);
-    final lookup = _source == LookupSource.auto
-        ? await BarcodeService.instance.lookup(widget.code)
-        : await BarcodeService.instance.lookupFromSource(
-            widget.code,
-            _source,
-          );
-    if (!mounted) return;
-    setState(() {
-      _lookup = lookup;
-      _loading = false;
-    });
-  }
-
-  Future<void> _changeSource(LookupSource newSource) async {
-    if (newSource == _source) return;
-    setState(() => _source = newSource);
-    await _doLookup();
-  }
-
-  Future<void> _saveOnlineAsItem() async {
-    final product = _lookup?.onlineProduct;
-    if (product == null) return;
-    final item = Item(
-      barcode: widget.code,
-      nameEn: product.name,
-      nameAr: product.nameAr,
-      brand: product.brand,
-      price: product.price,
-      currency: CurrencyExtension.fromCode(product.currency),
-      imageUrl: product.imageUrl,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-    final id = await ItemDao.instance.upsertByBarcode(item);
-    // Auto-link to the Default store so the item is never orphaned.
-    final saved = item.copyWith(
-        id: id == 0 ? null : id,
-        updatedAt: DateTime.now());
-    if (saved.id != null) {
-      await BarcodeService.instance.ensureDefaultStoreLink(saved);
+    try {
+      final lookup = await ref
+          .read(barcodeServiceProvider)
+          .lookupFromSource(widget.barcode, _source);
+      if (!mounted || _cancel.isCancelled) return;
+      setState(() {
+        _result = lookup;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted || _cancel.isCancelled) return;
+      setState(() => _loading = false);
     }
-    if (!mounted) return;
-    Navigator.of(context).pop(true);
   }
 
-  Future<void> _openManualForm() async {
-    final product = _lookup?.onlineProduct;
-    final prefill = Item(
-      barcode: widget.code,
-      nameEn: product?.name ?? '',
-      nameAr: product?.nameAr,
-      price: product?.price,
-      currency: CurrencyExtension.fromCode(product?.currency ?? 'SAR'),
-      imageUrl: product?.imageUrl,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => AddEditItemScreen(item: prefill)),
-    );
-    if (!mounted) return;
-    Navigator.of(context).pop(true);
+  String _sourceLabel(BuildContext context, LookupSource s) {
+    final l = AppLocalizations.of(context)!;
+    return switch (s) {
+      LookupSource.auto => l.sourceAuto,
+      LookupSource.openFoodFacts => l.sourceOpenFoodFacts,
+      LookupSource.searxng => l.sourceSearxng,
+    };
   }
 
-  Future<void> _openExistingItem() async {
-    final item = _lookup?.localItem;
-    if (item == null) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => AddEditItemScreen(item: item)),
-    );
-    if (!mounted) return;
-    Navigator.of(context).pop(true);
+  Future<void> _addToItems() async {
+    final l = AppLocalizations.of(context)!;
+    setState(() => _saving = true);
+    try {
+      final service = ref.read(barcodeServiceProvider);
+      final local = _result?.localItem;
+      final online = _result?.onlineProduct;
+      if (local != null) {
+        // Already saved — nothing to do.
+      } else if (online != null) {
+        await service.saveScrapedProduct(online, widget.barcode);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l.itemSaved)));
+        context.pop();
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l.saveFailed)));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final locale = context.watch<LocaleProvider>();
-    final isRtl = locale.isRtl;
-    final langCode = locale.locale?.languageCode ?? 'en';
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final currency = ref.watch(currencyProvider);
+    final locale = ref.watch(
+      localeProvider.select((s) => s?.languageCode ?? 'en'),
+    );
+
+    final local = _result?.localItem;
+    final online = _result?.onlineProduct;
+    final found = local != null || online != null;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(isRtl ? 'نتيجة المسح' : 'Scan Result'),
-      ),
-      body: Column(
+      appBar: AppBar(title: Text(l.scanBarcode)),
+      body: ListView(
+        padding: AppDimens.pagePadding.copyWith(bottom: 24),
         children: [
-          // ── Source selector ────────────────────────────────────────
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  isRtl ? 'البحث في:' : 'Look up in:',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 4),
-                DropdownButtonFormField<LookupSource>(
-                  initialValue: _source,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    prefixIcon: Icon(Icons.travel_explore_outlined),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  ),
-                  items: LookupSource.values
-                      .map(
-                        (s) => DropdownMenuItem<LookupSource>(
-                          value: s,
-                          child: Text(s.displayName(langCode)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) {
-                    if (v != null) _changeSource(v);
-                  },
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          // ── Result body ────────────────────────────────────────────
-          Expanded(
-            child:
-                _loading ? _buildLoading(isRtl) : _buildResult(isRtl, langCode),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoading(bool isRtl) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          Text(isRtl ? 'جاري البحث عن الباركود...' : 'Looking up barcode...'),
-          const SizedBox(height: 8),
-          Text(
-            widget.code,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontFamily: 'RobotoMono',
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            isRtl
-                ? 'المصدر: ${_source.displayName('ar')}'
-                : 'Source: ${_source.displayName('en')}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 24),
-          TextButton(
-            onPressed: _openManualForm,
-            child: Text(
-                isRtl ? 'إلغاء والإدخال يدوياً' : 'Cancel and fill manually',),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildResult(bool isRtl, String langCode) {
-    final lookup = _lookup;
-    if (lookup == null) {
-      return Center(
-        child: Text(isRtl ? 'فشل البحث' : 'Lookup failed'),
-      );
-    }
-
-    if (lookup.foundLocal && _source == LookupSource.auto) {
-      final item = lookup.localItem!;
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          // Barcode + source picker
+          Row(
             children: [
-              Icon(Icons.check_circle,
-                  size: 64, color: Theme.of(context).colorScheme.primary,),
-              const SizedBox(height: 16),
-              Text(isRtl ? 'وُجد في منتجاتك' : 'Found in your items',
-                  style: Theme.of(context).textTheme.titleMedium,),
-              const SizedBox(height: 24),
-              Card(
-                child: ListTile(
-                  title: Text(item.displayName(langCode)),
-                  subtitle: Text(item.barcode ?? ''),
-                  trailing: Text(item.price == null
-                      ? '—'
-                      : item.currency.format(item.price!),),
-                ),
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _openExistingItem,
-                icon: const Icon(Icons.edit),
-                label: Text(isRtl ? 'فتح المنتج' : 'Open item'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (lookup.foundOnline) {
-      final product = lookup.onlineProduct!;
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.cloud_done,
-                  size: 64, color: Theme.of(context).colorScheme.primary,),
-              const SizedBox(height: 16),
-              Text(isRtl ? 'تم العثور على المنتج' : 'Item found',
-                  style: Theme.of(context).textTheme.titleMedium,),
-              const SizedBox(height: 8),
-              Text(
-                isRtl
-                    ? 'المصدر: ${product.source}'
-                    : 'Source: ${product.source}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 24),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(product.name,
-                          style: Theme.of(context).textTheme.titleMedium,),
-                      if (product.nameAr != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(product.nameAr!,
-                              textDirection: TextDirection.rtl,),
-                        ),
-                      const SizedBox(height: 8),
-                      Text(
-                        product.price == null
-                            ? (isRtl ? 'السعر غير متوفر' : 'No price')
-                            : '${product.currency} ${product.price!.toStringAsFixed(2)}',
-                        style: Theme.of(context).textTheme.bodyLarge,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l.barcodeField,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
-                    ],
-                  ),
+                    ),
+                    Text(
+                      widget.barcode,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontFamily: 'AppMono',
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _saveOnlineAsItem,
-                icon: const Icon(Icons.save),
-                label: Text(isRtl ? 'أضف إلى منتجاتي' : 'Add to my items'),
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: _openManualForm,
-                child: Text(isRtl ? 'تعديل قبل الحفظ' : 'Edit before saving'),
               ),
             ],
           ),
-        ),
-      );
-    }
-
-    // Not found
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search_off,
-                size: 64, color: Theme.of(context).colorScheme.error,),
-            const SizedBox(height: 16),
-            Text(
-              isRtl
-                  ? 'غير موجود في ${_source.displayName('ar')}'
-                  : 'Not found in ${_source.displayName('en')}',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium,
+          const SizedBox(height: AppDimens.space3),
+          DropdownButtonFormField<LookupSource>(
+            initialValue: _source,
+            decoration: InputDecoration(
+              labelText: l.lookupSource,
+              prefixIcon: const Icon(Icons.public, size: 20),
             ),
-            const SizedBox(height: 8),
-            Text(
-              isRtl
-                  ? 'جرّب مصدراً آخر أو أدخل البيانات يدوياً'
-                  : 'Try another source or fill the data manually',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 24),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                if (_source != LookupSource.auto)
-                  FilledButton.tonalIcon(
-                    onPressed: () => _changeSource(LookupSource.auto),
-                    icon: const Icon(Icons.auto_awesome),
-                    label: Text(isRtl ? 'ابحث في الكل' : 'Try all sources'),
-                  ),
-                FilledButton.icon(
-                  onPressed: _openManualForm,
-                  icon: const Icon(Icons.edit),
-                  label: Text(isRtl ? 'أدخل يدوياً' : 'Fill manually'),
+            items: [
+              for (final s in LookupSource.values)
+                DropdownMenuItem(
+                  value: s,
+                  child: Text(_sourceLabel(context, s)),
                 ),
-              ],
+            ],
+            onChanged: (v) {
+              if (v == null || v == _source) return;
+              setState(() => _source = v);
+              _lookup();
+            },
+          ),
+          const SizedBox(height: AppDimens.space5),
+
+          if (_loading)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppDimens.space8),
+              child: Column(
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: AppDimens.space4),
+                  Text(
+                    _source == LookupSource.auto
+                        ? l.lookingUp
+                        : l.searchingOnline,
+                  ),
+                ],
+              ),
+            )
+          else if (local != null) ...[
+            StatusChip(
+              icon: Icons.inventory_2_rounded,
+              label: l.scanResultFoundLocally,
+              color: theme.colorScheme.secondary,
+            ),
+            const SizedBox(height: AppDimens.space3),
+            _ProductCard(
+              name: local.displayName(locale),
+              brand: local.brand,
+              imageUrl: local.imageUrl,
+            ),
+            const SizedBox(height: AppDimens.space4),
+            FilledButton(
+              onPressed: () => context.push(Routes.item(local.id)),
+              child: Text(l.editItem),
+            ),
+          ] else if (online != null) ...[
+            StatusChip(
+              icon: Icons.cloud_done_outlined,
+              label: l.scanResultFoundOnline,
+              color: theme.colorScheme.secondary,
+            ),
+            const SizedBox(height: AppDimens.space3),
+            _ProductCard(
+              name: online.name,
+              brand: online.brand,
+              price: online.price,
+              priceCurrency: currencyFromCode(online.currency),
+              imageUrl: online.imageUrl,
+              source: online.source,
+            ),
+            const SizedBox(height: AppDimens.space4),
+            FilledButton.icon(
+              onPressed: _saving ? null : _addToItems,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.add_shopping_cart_outlined, size: 18),
+              label: Text(widget.listId != null ? l.addToList : l.addToItems),
+            ),
+          ] else ...[
+            EmptyState(
+              icon: Icons.search_off_rounded,
+              title: l.scanResultNotFound,
+              hint: l.scanResultNotFoundHint,
+            ),
+            const SizedBox(height: AppDimens.space4),
+            OutlinedButton.icon(
+              onPressed: () =>
+                  context.push(Routes.newItem(barcode: widget.barcode)),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: Text(l.fillManually),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ProductCard extends StatelessWidget {
+  final String name;
+  final String? brand;
+  final double? price;
+  final AppCurrency? priceCurrency;
+  final String? imageUrl;
+  final String? source;
+
+  const _ProductCard({
+    required this.name,
+    this.brand,
+    this.price,
+    this.priceCurrency,
+    this.imageUrl,
+    this.source,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final currency = ProviderScope.containerOf(context).read(currencyProvider);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppDimens.space4),
+        child: Row(
+          children: [
+            AppImage(url: imageUrl, size: 72),
+            const SizedBox(width: AppDimens.space4),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: theme.textTheme.titleMedium,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (brand != null && brand!.isNotEmpty)
+                    Text(brand!, style: theme.textTheme.bodySmall),
+                  if (source != null)
+                    Text(
+                      source!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  if (price != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: PriceText(
+                        priceCurrency != null
+                            ? priceCurrency!.convertTo(price!, currency)
+                            : price,
+                        currency: currency,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ],
         ),

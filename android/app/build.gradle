@@ -36,7 +36,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.example.bazaar"
+    namespace = "io.github.wissamza.bazaar"
     compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
@@ -48,8 +48,9 @@ android {
     kotlinOptions { jvmTarget = "17" }
 
     defaultConfig {
-        applicationId = "com.example.bazaar"
-        minSdkVersion = flutter.minSdkVersion           // covers ~97% of Android devices
+        applicationId = "io.github.wissamza.bazaar"
+        // flutter_secure_storage 11 requires API 23+ (Keystore APIs).
+        minSdkVersion = 23
         targetSdk = 37
         versionCode = flutterVersionCode.toInteger()
         versionName = flutterVersionName
@@ -79,12 +80,29 @@ android {
             signingConfig = keystoreProperties.containsKey('storeFile')
                 ? signingConfigs.release
                 : signingConfigs.debug
-            minifyEnabled false
-            shrinkResources false
+            // R8 code/resource shrinking — smaller APKs, tree-shaken
+            // plugins. Keep rules live in proguard-rules.pro for the
+            // MediaPipe/flutter_gemma JNI surface.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles(
+                getDefaultProguardFile('proguard-android-optimize.txt'),
+                'proguard-rules.pro'
+            )
         }
     }
 }
 
 flutter {
     source = "../.."
+}
+
+// flutter_gemma loads MediaPipe native libs that must be extracted from the
+// APK (not loaded directly from the archive).
+android {
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }

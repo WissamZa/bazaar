@@ -1,36 +1,55 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../core/database/dao/store_dao.dart';
-import '../../core/models/store.dart';
-import '../../core/providers/locale_provider.dart';
+import '../../core/database/app_database.dart';
+import '../../core/design/app_dimens.dart';
+import '../../core/design/components/app_image.dart';
+import '../../core/providers/database_provider.dart';
+import '../../l10n/generated/app_localizations.dart';
 
-class AddEditStoreScreen extends StatefulWidget {
-  final Store? store;
-  const AddEditStoreScreen({super.key, this.store});
+/// Create / edit a store (bilingual name, website, address, image).
+class AddEditStoreScreen extends ConsumerStatefulWidget {
+  final int? storeId;
+
+  const AddEditStoreScreen({super.key, this.storeId});
 
   @override
-  State<AddEditStoreScreen> createState() => _AddEditStoreScreenState();
+  ConsumerState<AddEditStoreScreen> createState() => _AddEditStoreScreenState();
 }
 
-class _AddEditStoreScreenState extends State<AddEditStoreScreen> {
+class _AddEditStoreScreenState extends ConsumerState<AddEditStoreScreen> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _name;
-  late final TextEditingController _nameAr;
-  late final TextEditingController _website;
-  late final TextEditingController _address;
-  String? _imageUrl;
-  bool _busy = false;
+  final _name = TextEditingController();
+  final _nameAr = TextEditingController();
+  final _website = TextEditingController();
+  final _address = TextEditingController();
+  final _imageUrl = TextEditingController();
+  String? _localImagePath;
+  bool _saving = false;
+  bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    _name = TextEditingController(text: widget.store?.name ?? '');
-    _nameAr = TextEditingController(text: widget.store?.nameAr ?? '');
-    _website = TextEditingController(text: widget.store?.website ?? '');
-    _address = TextEditingController(text: widget.store?.address ?? '');
-    _imageUrl = widget.store?.imageUrl;
+    _load();
+  }
+
+  Future<void> _load() async {
+    if (widget.storeId == null) return;
+    setState(() => _loading = true);
+    final db = ref.read(databaseProvider);
+    final row = await db.storeDao.findById(widget.storeId!);
+    if (row != null && mounted) {
+      _name.text = row.name;
+      _nameAr.text = row.nameAr ?? '';
+      _website.text = row.website ?? '';
+      _address.text = row.address ?? '';
+      _imageUrl.text = row.imageUrl ?? '';
+      setState(() => _loading = false);
+    }
   }
 
   @override
@@ -39,197 +58,190 @@ class _AddEditStoreScreenState extends State<AddEditStoreScreen> {
     _nameAr.dispose();
     _website.dispose();
     _address.dispose();
+    _imageUrl.dispose();
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image == null) return;
-    setState(() {
-      _imageUrl = image.path;
-    });
-  }
-
-  Future<void> _pickImageUrl() async {
-    final ctrl = TextEditingController();
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          context.read<LocaleProvider>().isRtl ? 'رابط الصورة' : 'Image URL',
-        ),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(hintText: 'https://...'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              context.read<LocaleProvider>().isRtl ? 'إلغاء' : 'Cancel',
-            ),
-          ),
-          FilledButton(
-            onPressed: () {
-              setState(() {
-                _imageUrl = ctrl.text.trim();
-              });
-              Navigator.pop(ctx);
-            },
-            child: Text(context.read<LocaleProvider>().isRtl ? 'حفظ' : 'Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _save() async {
-    final en = _name.text.trim();
-    final ar = _nameAr.text.trim();
-    // Only the name is required — either EN or AR. The rest is optional.
-    if (en.isEmpty && ar.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            context.read<LocaleProvider>().isRtl
-                ? 'أدخل اسماً واحداً على الأقل (إنجليزي أو عربي)'
-                : 'Enter at least one name (English or Arabic)',
+    final l = AppLocalizations.of(context)!;
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final image = _imageUrl.text.trim().isNotEmpty
+          ? _imageUrl.text.trim()
+          : _localImagePath;
+
+      if (widget.storeId == null) {
+        await db.storeDao.insertStore(
+          StoresCompanion.insert(
+            name: _name.text.trim(),
+            createdAt: DateTime.now().toIso8601String(),
+            nameAr: Value(
+              _nameAr.text.trim().isEmpty ? null : _nameAr.text.trim(),
+            ),
+            website: Value(
+              _website.text.trim().isEmpty ? null : _website.text.trim(),
+            ),
+            address: Value(
+              _address.text.trim().isEmpty ? null : _address.text.trim(),
+            ),
+            imageUrl: Value(image),
           ),
-        ),
-      );
-      return;
+        );
+      } else {
+        await db.storeDao.updateStore(
+          widget.storeId!,
+          StoresCompanion(
+            name: Value(_name.text.trim()),
+            nameAr: Value(
+              _nameAr.text.trim().isEmpty ? null : _nameAr.text.trim(),
+            ),
+            website: Value(
+              _website.text.trim().isEmpty ? null : _website.text.trim(),
+            ),
+            address: Value(
+              _address.text.trim().isEmpty ? null : _address.text.trim(),
+            ),
+            imageUrl: Value(image),
+          ),
+        );
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l.storeSaved)));
+        context.pop();
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    setState(() => _busy = true);
-    final existing = widget.store;
-    final store = Store(
-      id: existing?.id,
-      name: en,
-      nameAr: ar.isEmpty ? null : ar,
-      website: _website.text.trim().isEmpty ? null : _website.text.trim(),
-      address: _address.text.trim().isEmpty ? null : _address.text.trim(),
-      imageUrl: _imageUrl,
-      createdAt: existing?.createdAt ?? DateTime.now(),
+  }
+
+  Future<void> _pickImage() async {
+    final xfile = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
     );
-    if (existing == null) {
-      await StoreDao.instance.upsertByName(store);
-    } else {
-      await StoreDao.instance.update(store);
-    }
-    if (!mounted) return;
-    setState(() => _busy = false);
-    Navigator.of(context).pop();
+    if (xfile != null) setState(() => _localImagePath = xfile.path);
   }
 
   @override
   Widget build(BuildContext context) {
-    final locale = context.watch<LocaleProvider>();
-    final isRtl = locale.isRtl;
+    final l = AppLocalizations.of(context)!;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          isRtl
-              ? (widget.store == null ? 'متجر جديد' : 'تعديل المتجر')
-              : (widget.store == null ? 'New Store' : 'Edit Store'),
-        ),
+        title: Text(widget.storeId == null ? l.newStore : l.editStore),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: _name,
-                decoration: InputDecoration(
-                  labelText:
-                      isRtl ? 'اسم المتجر (إنجليزي)' : 'Store Name (English)',
-                  prefixIcon: const Icon(Icons.storefront_outlined),
-                  helperText: isRtl
-                      ? 'مطلوب: اسم واحد على الأقل (إنجليزي أو عربي)'
-                      : 'Required: at least one name (EN or AR)',
-                ),
-                textInputAction: TextInputAction.next,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _nameAr,
-                decoration: InputDecoration(
-                  labelText: isRtl ? 'الاسم (عربي)' : 'Name (Arabic)',
-                  prefixIcon: const Icon(Icons.label_outline),
-                  helperText: isRtl ? 'اختياري' : 'Optional',
-                ),
-                textDirection: TextDirection.rtl,
-              ),
-              const SizedBox(height: 12),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextButton.icon(
-                      onPressed: _pickImage,
-                      icon: Icon(
-                        _imageUrl == null ? Icons.image : Icons.check_circle,
-                      ),
-                      label: Text(
-                        _imageUrl == null
-                            ? (isRtl ? 'إضافة صورة' : 'Add Image')
-                            : (isRtl ? 'تغيير الصورة' : 'Change Image'),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: AppDimens.pagePadding.copyWith(bottom: 24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Stack(
+                        children: [
+                          AppImage(
+                            url: _imageUrl.text.isNotEmpty
+                                ? _imageUrl.text
+                                : _localImagePath,
+                            size: 96,
+                            fallbackIcon: Icons.storefront_outlined,
+                          ),
+                          Positioned.directional(
+                            textDirection: Directionality.of(context),
+                            end: -8,
+                            bottom: -8,
+                            child: IconButton.filledTonal(
+                              onPressed: _pickImage,
+                              icon: const Icon(
+                                Icons.photo_camera_outlined,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton.icon(
-                    onPressed: _pickImageUrl,
-                    icon: const Icon(Icons.link),
-                    label: Text(isRtl ? 'رابط' : 'URL'),
-                  ),
-                  if (_imageUrl != null)
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => setState(() => _imageUrl = null),
+                    const SizedBox(height: AppDimens.space4),
+                    TextFormField(
+                      controller: _name,
+                      textInputAction: TextInputAction.next,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? l.storeNameRequired
+                          : null,
+                      decoration: InputDecoration(
+                        labelText: l.storeNameField,
+                        border: const OutlineInputBorder(),
+                      ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _address,
-                decoration: InputDecoration(
-                  labelText: isRtl ? 'العنوان' : 'Address',
-                  prefixIcon: const Icon(Icons.location_on_outlined),
-                  helperText: isRtl ? 'اختياري' : 'Optional',
+                    const SizedBox(height: AppDimens.space3),
+                    TextFormField(
+                      controller: _nameAr,
+                      textDirection: TextDirection.rtl,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: l.storeNameArField,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.space3),
+                    TextFormField(
+                      controller: _website,
+                      keyboardType: TextInputType.url,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: l.websiteField,
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.link, size: 20),
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.space3),
+                    TextFormField(
+                      controller: _address,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: l.addressField,
+                        border: const OutlineInputBorder(),
+                        prefixIcon: const Icon(
+                          Icons.location_on_outlined,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.space3),
+                    TextFormField(
+                      controller: _imageUrl,
+                      decoration: InputDecoration(
+                        labelText: l.imageUrlField,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: AppDimens.space5),
+                    FilledButton(
+                      onPressed: _saving ? null : _save,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(
+                          AppDimens.minTouchTarget,
+                        ),
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(l.commonSave),
+                    ),
+                  ],
                 ),
-                keyboardType: TextInputType.streetAddress,
-                maxLines: 2,
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _website,
-                decoration: InputDecoration(
-                  labelText: isRtl ? 'الموقع الإلكتروني' : 'Website',
-                  prefixIcon: const Icon(Icons.link),
-                  helperText: isRtl ? 'اختياري' : 'Optional',
-                  hintText: 'https://',
-                ),
-                keyboardType: TextInputType.url,
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _busy ? null : _save,
-                icon: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save),
-                label: Text(isRtl ? 'حفظ' : 'Save'),
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 }

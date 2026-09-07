@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Bazaar — Home (Arabic, RTL)</title>
+<style>
+  :root {
+    --bg: #1a1815;
+    --surface: #25221d;
+    --surface-2: #2e2a23;
+    --primary: #d6b85d;
+    --accent: #d6b85d;
+    --text: #eeeeed;
+    --muted: #908e87;
+    --border: #3d3a30;
+    --success: #7bc393;
+    --error: #c47b74;
+  }
+  @page { size: 393px 852px; margin: 0; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 393px; height: 852px;
+    font-family: 'Inter', 'Noto Sans Arabic', -apple-system, sans-serif;
+    color: var(--text);
+    background: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .phone {
+    width: 393px; height: 852px;
+    background: var(--bg);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .statusbar {
+    height: 44px;
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    font-size: 14px; font-weight: 600;
+    color: var(--text);
+  }
+  .appbar {
+    height: 56px;
+    background: var(--surface);
+    padding: 0 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+  }
+  .appbar .title { font-size: 22px; font-weight: 700; }
+  .appbar .actions { font-size: 22px; color: var(--primary); }
+
+  .content { flex: 1; overflow: hidden; padding: 16px; }
+  .greeting { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .greeting-name { font-size: 24px; font-weight: 700; margin-bottom: 18px; }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+  .kpi-card {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 14px 12px;
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+  .kpi-card .num { font-size: 24px; font-weight: 800; color: var(--primary); line-height: 1; }
+  .kpi-card .label { font-size: 10px; color: var(--muted); margin-top: 6px; }
+
+  .section-title {
+    font-size: 11px; font-weight: 700; color: var(--accent);
+    margin: 18px 0 10px;
+  }
+
+  .list-card {
+    background: var(--surface);
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    padding: 14px;
+    margin-bottom: 8px;
+  }
+  .list-card .name { font-size: 15px; font-weight: 600; }
+  .list-card .meta { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .list-card .total { color: var(--success); font-weight: 600; }
+
+  .compare-card {
+    background: var(--surface);
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    padding: 14px;
+  }
+  .compare-card .pname { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+  .compare-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
+  .compare-row.best .price { color: var(--success); font-weight: 700; }
+  .compare-row.worst .price { color: var(--error); }
+
+  .bottomnav {
+    height: 70px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-around;
+    padding-bottom: 10px;
+  }
+  .navitem {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    color: var(--muted); font-size: 11px;
+  }
+  .navitem.active { color: var(--primary); }
+  .navitem .icon { font-size: 24px; }
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="statusbar">
+    <span>9:41</span>
+    <span>📶 🔋 87%</span>
+  </div>
+  <div class="appbar">
+    <div class="title">بازار</div>
+    <div class="actions">⚙</div>
+  </div>
+  <div class="content">
+    <div class="greeting">صباح الخير،</div>
+    <div class="greeting-name">وسام 👋</div>
+
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="num">12</div><div class="label">قائمة</div></div>
+      <div class="kpi-card"><div class="num">84</div><div class="label">منتج</div></div>
+      <div class="kpi-card"><div class="num">7</div><div class="label">متجر</div></div>
+    </div>
+
+    <div class="section-title">القوائم الأخيرة</div>
+    <div class="list-card">
+      <div class="name">البقالة الأسبوعية</div>
+      <div class="meta"><span>14 منتج · 9 مُحدد</span><span class="total">﷼ 247.50</span></div>
+    </div>
+    <div class="list-card">
+      <div class="name">تحضير العيد</div>
+      <div class="meta"><span>22 منتج · 3 مُحدد</span><span class="total">﷼ 612.00</span></div>
+    </div>
+
+    <div class="section-title">الأرخص عبر المتاجر</div>
+    <div class="compare-card">
+      <div class="pname">حليب المراعي الطازج 1 لتر</div>
+      <div class="compare-row best"><span>بندة</span><span class="price">﷼ 6.75</span></div>
+      <div class="compare-row"><span>كارفور</span><span class="price">﷼ 7.25</span></div>
+      <div class="compare-row worst"><span>تميمي</span><span class="price">﷼ 7.95</span></div>
+    </div>
+  </div>
+  <div class="bottomnav">
+    <div class="navitem active"><span class="icon">🏠</span>الرئيسية</div>
+    <div class="navitem"><span class="icon">📦</span>المنتجات</div>
+    <div class="navitem"><span class="icon">📋</span>القوائم</div>
+    <div class="navitem"><span class="icon">🏬</span>المتاجر</div>
+  </div>
+</div>
+</body>
+</html>

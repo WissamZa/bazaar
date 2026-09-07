@@ -1,599 +1,519 @@
-import 'dart:io' show File;
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../core/providers/locale_provider.dart';
-import '../../core/providers/scraping_provider.dart';
-import '../../core/services/llm_extractor.dart';
+import '../../core/design/app_dimens.dart';
+import '../../core/design/components/section_header.dart';
+import '../../core/design/components/status_chip.dart';
+import '../../core/providers/settings_providers.dart';
+import '../../core/services/llm_extractor.dart' show LlmProvider, LlmProviderX;
 import '../../core/services/on_device_llm.dart';
+import '../../core/services/scraping_config.dart';
 import '../../core/services/secrets.dart';
-import 'pipeline_debugger_screen.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../core/router/app_router.dart';
 
-/// Full settings UI for Tier 1/2/3 scraping configuration.
-/// Lets the user:
-///   • pick extraction strategy
-///   • pick cloud LLM provider
-///   • enter / clear API keys (stored in secure storage)
-///   • override model & base URL
-///   • download / delete on-device LLM model
-///   • configure SearXNG base URL
-///   • forget all keys at once
-class LlmSettingsScreen extends StatefulWidget {
+/// Search & AI settings: extraction strategy, cloud provider + keys,
+/// SearXNG server, and the on-device model manager.
+class LlmSettingsScreen extends ConsumerStatefulWidget {
   const LlmSettingsScreen({super.key});
 
   @override
-  State<LlmSettingsScreen> createState() => _LlmSettingsScreenState();
+  ConsumerState<LlmSettingsScreen> createState() => _LlmSettingsScreenState();
 }
 
-class _LlmSettingsScreenState extends State<LlmSettingsScreen> {
-  bool _downloading = false;
-  double _downloadProgress = 0;
-  String? _downloadStatus;
-
-  /// Cached read of the stored on-device model name (for display).
-  /// Reads from secure storage on first build only.
-  Future<String?>? _storedModelNameFuture;
-  Future<String?> _readStoredModelName() {
-    _storedModelNameFuture ??= Secrets.instance.getOnDeviceModelName();
-    return _storedModelNameFuture!;
-  }
+class _LlmSettingsScreenState extends ConsumerState<LlmSettingsScreen> {
+  double? _downloadProgress;
 
   @override
   Widget build(BuildContext context) {
-    final locale = context.watch<LocaleProvider>();
-    final isRtl = locale.isRtl;
-    final s = context.watch<ScrapingProvider>();
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final config = ref.watch(scrapingConfigProvider);
+    final presence =
+        ref.watch(keyPresenceProvider).value ?? const KeyPresence.empty();
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(isRtl ? 'إعدادات البحث و LLM' : 'Search & LLM Settings'),
+        title: Text(l.searchAndAiTitle),
+        actions: [
+          IconButton(
+            tooltip: l.pipelineDebugger,
+            icon: const Icon(Icons.bug_report_outlined),
+            onPressed: () => context.push(Routes.pipelineDebugger),
+          ),
+        ],
       ),
       body: ListView(
+        padding: AppDimens.pagePadding.copyWith(bottom: 32),
         children: [
-          // ── Pipeline debugger ─────────────────────────────────────────
-          // Prominent button at the top so the user can verify their config
-          // actually works before relying on it.
-          Container(
-            margin: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.primaryContainer,
-                  Theme.of(context).colorScheme.surfaceContainerHighest,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ListTile(
-              leading: Icon(Icons.bug_report,
-                  color: Theme.of(context).colorScheme.primary),
-              title: Text(
-                isRtl
-                    ? 'تنقيح خط الأنابيب — اختبر أي باركود'
-                    : 'Pipeline Debugger — test any barcode',
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              subtitle: Text(
-                isRtl
-                    ? 'شاهد ماذا ترجع كل خطوة (OFF, SearXNG, JSON-LD, LLM)'
-                    : 'See exactly what each step returns (OFF, SearXNG, JSON-LD, LLM)',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const PipelineDebuggerScreen(),
+          // ── Status ────────────────────────────────────────────────────
+          StatusChip(
+            icon: config.isConfigComplete(presence)
+                ? Icons.check_circle_outline
+                : Icons.error_outline,
+            label: config.isConfigComplete(presence)
+                ? l.configComplete
+                : l.configIncomplete,
+            color: config.isConfigComplete(presence)
+                ? theme.colorScheme.secondary
+                : theme.colorScheme.error,
+          ),
+
+          // ── Strategy ──────────────────────────────────────────────────
+          SectionHeader(l.extractionStrategy),
+          Card(
+            child: Column(
+              children: [
+                for (final s in ExtractionStrategy.values)
+                  RadioListTile<ExtractionStrategy>(
+                    value: s,
+                    groupValue: config.strategy,
+                    title: Text(switch (s) {
+                      ExtractionStrategy.schemaOnly => l.strategySchemaOnly,
+                      ExtractionStrategy.schemaThenCloudLlm =>
+                        l.strategySchemaCloud,
+                      ExtractionStrategy.schemaThenOnDevice =>
+                        l.strategySchemaOnDevice,
+                      ExtractionStrategy.schemaCloudOnDevice =>
+                        l.strategySchemaCloudOnDevice,
+                      ExtractionStrategy.cloudLlmOnly => l.strategyCloudOnly,
+                      ExtractionStrategy.onDeviceOnly => l.strategyOnDeviceOnly,
+                    }),
+                    onChanged: (v) => _update(config.copyWith(strategy: v)),
                   ),
-                );
-              },
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 0, 0),
+            child: Text(
+              l.strategyHint,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
 
-          // ── Strategy ────────────────────────────────────────────────
-          _Section(isRtl ? 'استراتيجية الاستخراج' : 'Extraction strategy'),
-          for (final strat in ExtractionStrategy.values)
-            RadioListTile<ExtractionStrategy>(
-              value: strat,
-              groupValue: s.strategy,
-              title: Text(strat.displayName(isRtl ? 'ar' : 'en')),
-              onChanged: (v) => v == null ? null : s.setStrategy(v),
-            ),
-
-          // ── Config completeness banner ──────────────────────────────
-          if (!s.isConfigComplete) ...[
-            Container(
-              margin: const EdgeInsets.all(12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.errorContainer,
-                borderRadius: BorderRadius.circular(8),
+          // ── SearXNG ───────────────────────────────────────────────────
+          SectionHeader(l.searxngUrlField),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.dns_outlined),
+              title: Text(
+                config.searxngUrl.isEmpty
+                    ? l.searxngUrlHint
+                    : config.searxngUrl,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded,
-                      color: Theme.of(context).colorScheme.onErrorContainer),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      isRtl
-                          ? 'الإعداد غير مكتمل — أكمل البيانات بالأسفل أو اختر استراتيجية مختلفة.'
-                          : 'Config incomplete — fill in the fields below or pick a different strategy.',
+              trailing: const Icon(Icons.edit_outlined, size: 20),
+              onTap: () => _editSearxngUrl(config),
+            ),
+          ),
+
+          // ── Cloud provider ────────────────────────────────────────────
+          SectionHeader(l.cloudProvider),
+          Card(
+            child: Column(
+              children: [
+                for (final p in LlmProvider.values)
+                  RadioListTile<LlmProvider>(
+                    value: p,
+                    groupValue: config.provider,
+                    title: Text(switch (p) {
+                      LlmProvider.gemini => l.providerGemini,
+                      LlmProvider.openai => l.providerOpenai,
+                      LlmProvider.groq => l.providerGroq,
+                      LlmProvider.cerebras => l.providerCerebras,
+                      LlmProvider.ollama => l.providerOllama,
+                    }),
+                    secondary: StatusChip(
+                      icon: p == LlmProvider.ollama
+                          ? (presence.ollamaBaseUrl ? Icons.check : Icons.close)
+                          : (presence.forProvider(p)
+                                ? Icons.check
+                                : Icons.close),
+                      label: p == LlmProvider.ollama
+                          ? (presence.ollamaBaseUrl
+                                ? l.apiKeySet
+                                : l.apiKeyMissing)
+                          : (presence.forProvider(p)
+                                ? l.apiKeySet
+                                : l.apiKeyMissing),
+                      color:
+                          (p == LlmProvider.ollama
+                              ? presence.ollamaBaseUrl
+                              : presence.forProvider(p))
+                          ? theme.colorScheme.secondary
+                          : theme.colorScheme.error,
+                    ),
+                    onChanged: (v) => _update(
+                      config.copyWith(provider: v, model: '', baseUrl: ''),
                     ),
                   ),
-                ],
+              ],
+            ),
+          ),
+
+          // ── API key / model / base URL ────────────────────────────────
+          if (config.provider.needsApiKey)
+            Card(
+              child: ListTile(
+                leading: Icon(
+                  presence.forProvider(config.provider)
+                      ? Icons.key
+                      : Icons.key_off_outlined,
+                ),
+                title: Text(l.apiKeyField),
+                subtitle: Text(
+                  l.apiKeyHint,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: FilledButton.tonal(
+                  onPressed: () => _editApiKey(config),
+                  child: Text(l.commonEdit),
+                ),
               ),
             ),
-          ],
-
-          const Divider(),
-
-          // ── Cloud LLM provider ──────────────────────────────────────
-          if (s.strategy.usesCloudLlm) ...[
-            _Section(isRtl ? 'مزود السحابة' : 'Cloud provider'),
-            for (final p in LlmProvider.values)
-              RadioListTile<LlmProvider>(
-                value: p,
-                groupValue: s.provider,
-                title: Text(p.displayName(isRtl ? 'ar' : 'en')),
+          if (config.provider == LlmProvider.ollama)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.computer_outlined),
+                title: Text(l.ollamaBaseUrlField),
                 subtitle: Text(
-                  '${p.defaultModel} · ${p.needsApiKey ? "needs API key" : "self-hosted"}',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  presence.ollamaBaseUrl ? l.apiKeySet : l.providerOllama,
                 ),
-                onChanged: (v) => v == null ? null : s.setProvider(v),
-              ),
-
-            // ── Model override ─────────────────────────────────────
-            ListTile(
-              leading: const Icon(Icons.memory),
-              title: Text(isRtl ? 'اسم النموذج' : 'Model name'),
-              subtitle: Text(
-                s.model.isEmpty ? s.provider.defaultModel : s.model,
-                style: TextStyle(
-                  color: s.model.isEmpty ? Colors.grey : null,
+                trailing: FilledButton.tonal(
+                  onPressed: () => _editOllamaBaseUrl(),
+                  child: Text(l.commonEdit),
                 ),
-              ),
-              trailing: const Icon(Icons.edit, size: 18),
-              onTap: () => _editString(
-                title: isRtl ? 'اسم النموذج' : 'Model name',
-                initial: s.model,
-                hint: s.provider.defaultModel,
-                onSubmit: s.setModel,
               ),
             ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.memory_outlined),
+              title: Text(l.modelField),
+              subtitle: Text(config.model.isEmpty ? l.modelHint : config.model),
+              trailing: const Icon(Icons.edit_outlined, size: 20),
+              onTap: () => _editModel(config),
+            ),
+          ),
 
-            // ── Base URL override (OpenAI-compatible providers only) ─
-            if (s.provider != LlmProvider.gemini)
-              ListTile(
-                leading: const Icon(Icons.dns_outlined),
-                title: Text(isRtl ? 'عنوان الخادم' : 'Base URL'),
-                subtitle: Text(
-                  s.baseUrl.isEmpty ? s.provider.defaultBaseUrl : s.baseUrl,
-                  style: TextStyle(
-                    color: s.baseUrl.isEmpty ? Colors.grey : null,
+          // ── On-device model ───────────────────────────────────────────
+          SectionHeader(l.onDeviceModels),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppDimens.space4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l.onDeviceHint,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
-                trailing: const Icon(Icons.edit, size: 18),
-                onTap: () => _editString(
-                  title: isRtl ? 'عنوان الخادم' : 'Base URL',
-                  initial: s.baseUrl,
-                  hint: s.provider.defaultBaseUrl,
-                  onSubmit: s.setBaseUrl,
-                ),
-              ),
-
-            // ── API key ────────────────────────────────────────────
-            _buildApiKeyTile(s, isRtl),
-
-            const Divider(),
-          ],
-
-          // ── On-device LLM ───────────────────────────────────────────
-          if (s.strategy.usesOnDevice) ...[
-            _Section(isRtl ? 'النموذج المحلي' : 'On-device LLM'),
-            FutureBuilder<String?>(
-              future: OnDeviceLlm.instance.loadedModelPath == null
-                  ? _readStoredModelName()
-                  : Future.value(OnDeviceLlm.instance.loadedModelPath),
-              builder: (ctx, snap) {
-                if (!s.hasOnDeviceModel) {
-                  return _buildModelDownloader(isRtl);
-                }
-                final displayName = snap.data ??
-                    (isRtl ? 'النموذج المحلي' : 'On-device model');
-                return ListTile(
-                  leading: const Icon(Icons.check_circle, color: Colors.green),
-                  title: Text(isRtl ? 'النموذج جاهز' : 'Model ready'),
-                  subtitle: Text(
-                    (isRtl ? 'النموذج: ' : 'Model: ') + displayName,
-                  ),
-                  trailing: TextButton(
-                    onPressed: () => _confirmDeleteModel(isRtl),
-                    child: Text(
-                      isRtl ? 'حذف' : 'Delete',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
+                  const SizedBox(height: AppDimens.space3),
+                  for (final model in OnDeviceLlm.preset)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppDimens.space2),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              model.name,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                          FutureBuilder<bool>(
+                            future: OnDeviceLlm.isModelDownloaded(model.id),
+                            builder: (context, snap) {
+                              final downloaded = snap.data ?? false;
+                              return FilledButton.tonal(
+                                onPressed: _downloadProgress != null
+                                    ? null
+                                    : (downloaded
+                                          ? () => _deleteModel(
+                                              context,
+                                              ref,
+                                              model,
+                                            )
+                                          : () => _downloadModel(
+                                              model.id,
+                                              config,
+                                            )),
+                                child: Text(
+                                  downloaded ? l.deleteModel : l.downloadModel,
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
                     ),
+                  if (_downloadProgress != null) ...[
+                    const SizedBox(height: AppDimens.space2),
+                    Text(
+                      l.downloadingModel((_downloadProgress! * 100).round()),
+                    ),
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(value: _downloadProgress),
+                  ],
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      l.autoloadOnDevice,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    value: config.autoLoadOnDevice,
+                    onChanged: (v) =>
+                        _update(config.copyWith(autoLoadOnDevice: v)),
                   ),
-                );
-              },
-            ),
-
-            SwitchListTile(
-              secondary: const Icon(Icons.flash_on),
-              title: Text(isRtl
-                  ? 'تحميل النموذج تلقائياً عند بدء التطبيق'
-                  : 'Auto-load model on app start'),
-              subtitle: Text(isRtl
-                  ? 'يستهلك RAM أكثر لكنه يسرع أول بحث'
-                  : 'Uses more RAM but speeds up first search'),
-              value: s.autoLoadOnDevice,
-              onChanged: s.setAutoLoadOnDevice,
-            ),
-
-            const Divider(),
-          ],
-
-          // ── SearXNG base URL ────────────────────────────────────────
-          _Section(isRtl ? 'خادم SearXNG' : 'SearXNG server'),
-          ListTile(
-            leading: const Icon(Icons.travel_explore_outlined),
-            title: Text(isRtl ? 'عنوان SearXNG' : 'SearXNG URL'),
-            subtitle: Text(
-              s.searxngUrl,
-              style: TextStyle(
-                color: s.searxngUrl.isEmpty ? Colors.grey : null,
+                ],
               ),
             ),
-            trailing: const Icon(Icons.edit, size: 18),
-            onTap: () => _editString(
-              title: isRtl ? 'عنوان SearXNG' : 'SearXNG URL',
-              initial: s.searxngUrl,
-              hint: 'https://your-searxng.example:8080',
-              onSubmit: s.setSearxngUrl,
-            ),
           ),
 
-          const Divider(),
-
-          // ── Forget all keys ─────────────────────────────────────────
-          ListTile(
-            leading: Icon(Icons.delete_forever,
-                color: Theme.of(context).colorScheme.error),
-            title: Text(
-              isRtl ? 'مسح كل المفاتيح' : 'Forget all API keys',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+          // ── Danger zone ───────────────────────────────────────────────
+          const SizedBox(height: AppDimens.space4),
+          Card(
+            child: ListTile(
+              leading: Icon(Icons.key_off, color: theme.colorScheme.error),
+              title: Text(l.forgetAllKeys),
+              onTap: () => _forgetKeys(context, ref),
             ),
-            subtitle: Text(isRtl
-                ? 'يحذف كل المفاتيح من المخزن الآمن'
-                : 'Wipes every key from secure storage'),
-            onTap: () => _confirmForgetAll(isRtl),
           ),
         ],
       ),
     );
   }
 
-  // ── API-key tile ─────────────────────────────────────────────────────
-  Widget _buildApiKeyTile(ScrapingProvider s, bool isRtl) {
-    final bool hasKey;
-    final String keyLabel;
-    final Future<void> Function(String?) setter;
-    switch (s.provider) {
-      case LlmProvider.gemini:
-        hasKey = s.hasGeminiKey;
-        keyLabel = 'Gemini API key';
-        setter = s.setGeminiKey;
-        break;
-      case LlmProvider.openai:
-        hasKey = s.hasOpenAiKey;
-        keyLabel = 'OpenAI API key';
-        setter = s.setOpenAiKey;
-        break;
-      case LlmProvider.groq:
-        hasKey = s.hasGroqKey;
-        keyLabel = 'Groq API key';
-        setter = s.setGroqKey;
-        break;
-      case LlmProvider.cerebras:
-        hasKey = s.hasCerebrasKey;
-        keyLabel = 'Cerebras API key';
-        setter = s.setCerebrasKey;
-        break;
-      case LlmProvider.ollama:
-        hasKey = s.hasOllamaBaseUrl;
-        keyLabel = 'Ollama base URL';
-        setter = s.setOllamaBaseUrl;
-        break;
-    }
-
-    return ListTile(
-      leading: Icon(
-        hasKey ? Icons.lock_clock : Icons.key_off,
-        color: hasKey ? Colors.green : null,
-      ),
-      title: Text(keyLabel),
-      subtitle: Text(hasKey
-          ? (isRtl ? 'مخزّن بأمان' : 'Stored securely')
-          : (isRtl ? 'لم يُضبط' : 'Not set')),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (hasKey)
-            IconButton(
-              icon: const Icon(Icons.visibility_off, size: 18),
-              tooltip: isRtl ? 'مسح المفتاح' : 'Clear key',
-              onPressed: () => setter(null),
-            ),
-          const Icon(Icons.edit, size: 18),
-        ],
-      ),
-      onTap: () => _editSecret(
-        title: keyLabel,
-        isUrl: s.provider == LlmProvider.ollama,
-        isRtl: isRtl,
-        onSubmit: setter,
-      ),
-    );
-  }
-
-  // ── Model downloader ────────────────────────────────────────────────
-  Widget _buildModelDownloader(bool isRtl) {
-    if (_downloading) {
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: LinearProgressIndicator(value: _downloadProgress),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              '${(isRtl ? "جاري التنزيل" : "Downloading")}: '
-              '${(_downloadProgress * 100).toStringAsFixed(0)}%'
-              '${_downloadStatus == null ? "" : " — $_downloadStatus"}',
-            ),
-          ),
-        ],
-      );
-    }
-    return Column(
-      children: [
-        for (final m in OnDeviceLlm.preset)
-          ListTile(
-            leading: Icon(m.recommended
-                ? Icons.recommend
-                : Icons.download_for_offline_outlined),
-            title: Text(m.name),
-            subtitle: Text(
-              '${(m.sizeMb / 1024).toStringAsFixed(1)} GB · ${m.id}',
-            ),
-            trailing: m.recommended
-                ? Chip(label: Text(isRtl ? 'موصى به' : 'Recommended'))
-                : null,
-            onTap: () => _downloadModel(m.id, isRtl),
-          ),
-      ],
-    );
-  }
-
-  // ── Dialogs ─────────────────────────────────────────────────────────
-  Future<void> _editString({
-    required String title,
-    required String initial,
-    required String hint,
-    required Future<void> Function(String) onSubmit,
-  }) async {
-    final ctrl = TextEditingController(text: initial);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: InputDecoration(hintText: hint),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (result != null) await onSubmit(result);
-  }
-
-  Future<void> _editSecret({
-    required String title,
-    required bool isUrl,
-    required bool isRtl,
-    required Future<void> Function(String?) onSubmit,
-  }) async {
-    final ctrl = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          obscureText: !isUrl,
-          keyboardType: isUrl ? TextInputType.url : TextInputType.visiblePassword,
-          decoration: InputDecoration(
-            hintText: isUrl
-                ? 'http://localhost:11434'
-                : (isRtl ? 'ألصق المفتاح هنا' : 'Paste key here'),
-            helperText: isUrl
-                ? null
-                : (isRtl
-                    ? 'يُخزّن في Keystore / Keychain — لا يُعرض ولا يُسجَّل'
-                    : 'Stored in Keystore / Keychain — never displayed, never logged'),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (result != null && result.isNotEmpty) await onSubmit(result);
-  }
-
-  Future<void> _downloadModel(String modelId, bool isRtl) async {
-    setState(() {
-      _downloading = true;
-      _downloadProgress = 0;
-      _downloadStatus = isRtl ? 'بدء التنزيل' : 'Starting download';
-    });
+  // ── helpers ─────────────────────────────────────────────────────────────
+  Future<void> _update(ScrapingConfig config) async {
     try {
-      await OnDeviceLlm.downloadModel(
-        modelId,
-        onProgress: (p) {
-          if (mounted) {
-            setState(() {
-              _downloadProgress = p;
-              _downloadStatus = null;
-            });
-          }
-        },
-      );
-      if (!mounted) return;
-      await context.read<ScrapingProvider>().markOnDeviceModelReady();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(isRtl ? 'تم التنزيل بنجاح' : 'Downloaded')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${isRtl ? "فشل" : "Failed"}: $e')),
-      );
-    } finally {
+      await ref.read(scrapingConfigProvider.notifier).update(config);
+    } on ArgumentError {
       if (mounted) {
-        setState(() {
-          _downloading = false;
-          _downloadProgress = 0;
-          _downloadStatus = null;
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.invalidUrl)),
+        );
       }
     }
   }
 
-  Future<void> _confirmDeleteModel(bool isRtl) async {
-    final ok = await showDialog<bool>(
+  Future<void> _editSearxngUrl(ScrapingConfig config) async {
+    final l = AppLocalizations.of(context)!;
+    final controller = TextEditingController(text: config.searxngUrl);
+    final value = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isRtl ? 'حذف النموذج؟' : 'Delete model?'),
-        content: Text(isRtl
-            ? 'سيُحذف ملف النموذج من جهازك. يمكن إعادة تنزيله لاحقاً.'
-            : 'This deletes the model file from your device. You can re-download later.'),
+      builder: (context) => AlertDialog(
+        title: Text(l.searxngUrlField),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.url,
+          decoration: InputDecoration(hintText: l.searxngUrlHint),
+          onSubmitted: (v) => Navigator.of(context).pop(v),
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l.commonCancel),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(l.commonSave),
           ),
         ],
       ),
     );
-    if (ok != true) return;
-
-    // Unload from RAM if loaded.
-    await OnDeviceLlm.instance.unload();
-
-    // Delete the model file from disk.
-    final path = await Secrets.instance.getOnDeviceModelPath();
-    if (path != null) {
-      try {
-        final f = File(path);
-        if (f.existsSync()) await f.delete();
-      } catch (_) {}
+    controller.dispose();
+    if (value == null) return;
+    try {
+      ScrapingConfig.validateSearxngUrl(value);
+    } on ArgumentError {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l.invalidUrl)));
+      }
+      return;
     }
-    // Clear the pointers in secure storage (API keys are NOT touched).
+    await _update(config.copyWith(searxngUrl: value));
+  }
+
+  Future<void> _editApiKey(ScrapingConfig config) async {
+    final l = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.apiKeyField),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          autofocus: true,
+          onSubmitted: (v) => Navigator.of(context).pop(v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(l.commonSave),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null) return;
+    final secrets = Secrets.instance;
+    switch (config.provider) {
+      case LlmProvider.gemini:
+        await secrets.setGeminiKey(value);
+      case LlmProvider.openai:
+        await secrets.setOpenAiKey(value);
+      case LlmProvider.groq:
+        await secrets.setGroqKey(value);
+      case LlmProvider.cerebras:
+        await secrets.setCerebrasKey(value);
+      case LlmProvider.ollama:
+        break;
+    }
+    await ref.read(keyPresenceProvider.notifier).refresh();
+  }
+
+  Future<void> _editOllamaBaseUrl() async {
+    final l = AppLocalizations.of(context)!;
+    final current = await Secrets.instance.getOllamaBaseUrl();
+    final controller = TextEditingController(text: current ?? '');
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.ollamaBaseUrlField),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            hintText: 'http://localhost:11434/v1',
+          ),
+          onSubmitted: (v) => Navigator.of(context).pop(v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(l.commonSave),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null) return;
+    await Secrets.instance.setOllamaBaseUrl(value);
+    await ref.read(keyPresenceProvider.notifier).refresh();
+  }
+
+  Future<void> _editModel(ScrapingConfig config) async {
+    final l = AppLocalizations.of(context)!;
+    final controller = TextEditingController(text: config.model);
+    final value = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l.modelField),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(hintText: l.modelHint),
+          onSubmitted: (v) => Navigator.of(context).pop(v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l.commonCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(l.commonSave),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null) return;
+    await _update(config.copyWith(model: value));
+  }
+
+  Future<void> _downloadModel(String modelId, ScrapingConfig config) async {
+    try {
+      final path = await OnDeviceLlm.downloadModel(
+        modelId,
+        onProgress: (p) {
+          if (mounted) setState(() => _downloadProgress = p);
+        },
+      );
+      // Register the file with the MediaPipe runtime (idempotent).
+      await OnDeviceLlm.registerDownloadedModel();
+      debugPrint('On-device model saved: $path');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _downloadProgress = null);
+      await ref.read(keyPresenceProvider.notifier).refresh();
+    }
+  }
+
+  Future<void> _deleteModel(
+    BuildContext context,
+    WidgetRef ref,
+    OnDeviceModel model,
+  ) async {
+    final path = await OnDeviceLlm.modelFilePath(model.id);
+    final f = File(path);
+    if (f.existsSync()) await f.delete();
     await Secrets.instance.setOnDeviceModelPath(null);
     await Secrets.instance.setOnDeviceModelName(null);
-    // Force a refresh of cached flags.
-    await context.read<ScrapingProvider>().markOnDeviceModelReady();
-    // Force re-read of the model name next build.
-    _storedModelNameFuture = null;
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(isRtl ? 'تم حذف النموذج' : 'Model deleted')),
-    );
+    await ref.read(keyPresenceProvider.notifier).refresh();
   }
 
-  Future<void> _confirmForgetAll(bool isRtl) async {
-    final ok = await showDialog<bool>(
+  Future<void> _forgetKeys(BuildContext context, WidgetRef ref) async {
+    final l = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isRtl ? 'مسح كل المفاتيح؟' : 'Forget all keys?'),
-        content: Text(isRtl
-            ? 'يحذف كل مفاتيح الـ API من المخزن الآمن. لا يمكن التراجع.'
-            : 'Wipes every API key from secure storage. Cannot be undone.'),
+      builder: (context) => AlertDialog(
+        title: Text(l.forgetAllKeys),
+        content: Text(l.forgetAllKeysConfirm),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l.commonCancel),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Forget'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l.commonConfirm),
           ),
         ],
       ),
     );
-    if (ok != true) return;
-    await context.read<ScrapingProvider>().forgetAllSecrets();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(isRtl ? 'تم المسح' : 'Forgotten')),
-    );
-  }
-}
-
-class _Section extends StatelessWidget {
-  final String text;
-  const _Section(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Text(
-        text.toUpperCase(),
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: isDark
-              ? theme.colorScheme.secondary
-              : theme.colorScheme.primary,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
+    if (confirmed != true) return;
+    await Secrets.instance.clearAll();
+    await ref.read(keyPresenceProvider.notifier).refresh();
+    if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.keysForgotten)));
+    }
   }
 }

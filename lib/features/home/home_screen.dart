@@ -1,712 +1,382 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../core/database/dao/item_dao.dart';
-import '../../core/database/dao/item_store_dao.dart';
-import '../../core/database/dao/list_item_dao.dart';
-import '../../core/database/dao/shopping_list_dao.dart';
-import '../../core/database/dao/store_dao.dart';
-import '../../core/models/item.dart';
-import '../../core/models/item_store.dart';
-import '../../core/models/shopping_list.dart';
-import '../../core/models/store.dart';
-import '../../core/providers/locale_provider.dart';
-import '../../core/providers/user_provider.dart';
-import '../../widgets/currency_display.dart';
-import '../../widgets/empty_state.dart';
-import '../shopping_lists/list_detail_screen.dart';
-import '../shopping_lists/lists_screen.dart';
-import '../stores/stores_screen.dart';
+import '../../core/design/app_dimens.dart';
+import '../../core/design/components/app_image.dart';
+import '../../core/design/components/kpi_card.dart';
+import '../../core/design/components/price_text.dart';
+import '../../core/design/components/section_header.dart';
+import '../../core/design/components/empty_state.dart';
+import '../../core/providers/data_providers.dart';
+import '../../core/providers/settings_providers.dart';
+import '../../core/constants/currencies.dart';
+import '../../core/models/models.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../core/router/app_router.dart';
 
-/// Analytics dashboard shown as the first tab in [HomeShell].
-///
-/// Surfaces quick KPIs (total lists, items, stores), recent lists, the
-/// top stores by # of items tracked, and the most expensive items.
-class HomeScreen extends StatefulWidget {
+/// Dashboard: greeting, KPI grid, recent lists, stores by item count, and
+/// the most expensive items. Every section streams live from the database.
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  _Analytics? _data;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _refresh();
-  }
-
-  Future<void> _refresh() async {
-    setState(() => _loading = true);
-    final data = await _Analytics.load();
-    if (!mounted) return;
-    setState(() {
-      _data = data;
-      _loading = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final locale = context.watch<LocaleProvider>();
-    final user = context.watch<UserProvider>();
-    final isRtl = locale.isRtl;
-    final langCode = locale.locale?.languageCode ?? 'en';
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final username = ref.watch(userProvider);
+    final currency = ref.watch(currencyProvider);
 
     return Scaffold(
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _refresh,
-              child: _data == null || _data!.isEmpty
-                  ? ListView(
-                      children: [
-                        const SizedBox(height: 80),
-                        EmptyState(
-                          icon: Icons.analytics_outlined,
-                          title: isRtl ? 'لا توجد بيانات بعد' : 'No data yet',
-                          hint: isRtl
-                              ? 'أضف منتجات وقوائم ومتاجر لرؤية التحليلات'
-                              : 'Add items, lists and stores to see analytics',
-                        ),
-                      ],
-                    )
-                  : ListView(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                      children: [
-                        _GreetingCard(
-                          username: user.username ?? '',
-                          isRtl: isRtl,
-                          data: _data!,
-                        ),
-                        const SizedBox(height: 12),
-                        _KpiGrid(data: _data!, isRtl: isRtl),
-                        const SizedBox(height: 16),
-                        _SectionHeader(
-                          icon: Icons.checklist,
-                          title: isRtl ? 'أحدث قوائم التسوق' : 'Recent lists',
-                          isRtl: isRtl,
-                          onSeeAll: () => _push(const ListsScreen()),
-                        ),
-                        const SizedBox(height: 6),
-                        ..._data!.recentLists.map(
-                          (l) => _ListTileCard(
-                            list: l,
-                            itemCount: _data!.itemsPerList[l.id ?? -1] ?? 0,
-                            total: _data!.totalPerList[l.id ?? -1] ?? 0,
-                            isRtl: isRtl,
-                            langCode: langCode,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        _SectionHeader(
-                          icon: Icons.storefront,
-                          title: isRtl
-                              ? 'المتاجر حسب عدد المنتجات'
-                              : 'Stores by item count',
-                          isRtl: isRtl,
-                          onSeeAll: () => _push(const StoresScreen()),
-                        ),
-                        const SizedBox(height: 6),
-                        if (_data!.storeItemCounts.isEmpty)
-                          _EmptyHint(
-                            isRtl: isRtl,
-                            text: isRtl ? 'لا توجد متاجر بعد' : 'No stores yet',
-                          )
-                        else
-                          ..._data!.storeItemCounts.entries.map(
-                            (e) => _StoreBarRow(
-                              storeName: e.key,
-                              count: e.value,
-                              share: e.value / _data!.maxStoreCount,
-                              isRtl: isRtl,
-                            ),
-                          ),
-                        const SizedBox(height: 16),
-                        _SectionHeader(
-                          icon: Icons.trending_up,
-                          title: isRtl
-                              ? 'أغلى 5 منتجات'
-                              : 'Top 5 most expensive items',
-                          isRtl: isRtl,
-                        ),
-                        const SizedBox(height: 6),
-                        if (_data!.mostExpensive.isEmpty)
-                          _EmptyHint(
-                            isRtl: isRtl,
-                            text: isRtl ? 'لا توجد أسعار بعد' : 'No prices yet',
-                          )
-                        else
-                          ..._data!.mostExpensive.asMap().entries.map(
-                                (e) => _ItemRankRow(
-                                  rank: e.key + 1,
-                                  item: e.value,
-                                  isRtl: isRtl,
-                                  langCode: langCode,
-                                ),
-                              ),
-                        const SizedBox(height: 16),
-                        _SectionHeader(
-                          icon: Icons.price_change,
-                          title: isRtl
-                              ? 'مقارنة الأسعار عبر المتاجر'
-                              : 'Price comparison across stores',
-                          isRtl: isRtl,
-                        ),
-                        const SizedBox(height: 6),
-                        if (_data!.priceComparison.isEmpty)
-                          _EmptyHint(
-                            isRtl: isRtl,
-                            text: isRtl
-                                ? 'أضف نفس المنتج في متاجر متعددة لمقارنة الأسعار'
-                                : 'Add the same item at multiple stores to compare prices',
-                          )
-                        else
-                          ..._data!.priceComparison.entries.map(
-                            (e) => _PriceCompareRow(
-                              itemName: e.key,
-                              prices: e.value,
-                              isRtl: isRtl,
-                            ),
-                          ),
-                      ],
-                    ),
-            ),
-    );
-  }
-
-  void _push(Widget screen) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
-  }
-}
-
-// ────────────────────────── Data model ──────────────────────────────────
-
-class _Analytics {
-  final int totalLists;
-  final int totalItems;
-  final int totalStores;
-  final int totalItemStoreLinks;
-  final double itemsTotalValue;
-  final List<ShoppingList> recentLists;
-  final Map<int, int> itemsPerList;
-  final Map<int, double> totalPerList;
-  final Map<String, int> storeItemCounts;
-  final int maxStoreCount;
-  final List<Item> mostExpensive;
-  final Map<String, List<(String, double?)>> priceComparison;
-
-  const _Analytics({
-    required this.totalLists,
-    required this.totalItems,
-    required this.totalStores,
-    required this.totalItemStoreLinks,
-    required this.itemsTotalValue,
-    required this.recentLists,
-    required this.itemsPerList,
-    required this.totalPerList,
-    required this.storeItemCounts,
-    required this.maxStoreCount,
-    required this.mostExpensive,
-    required this.priceComparison,
-  });
-
-  bool get isEmpty => totalLists == 0 && totalItems == 0 && totalStores == 0;
-
-  static Future<_Analytics> load() async {
-    final lists = await ShoppingListDao.instance.all();
-    final items = await ItemDao.instance.all();
-    final stores = await StoreDao.instance.all();
-
-    final itemsPerList = <int, int>{};
-    final totalPerList = <int, double>{};
-    for (final l in lists) {
-      if (l.id == null) continue;
-      final rows = await ListItemDao.instance.forListWithItems(l.id!);
-      itemsPerList[l.id!] = rows.length;
-      var sum = 0.0;
-      for (final (item, li) in rows) {
-        sum += (item.price ?? 0) * li.quantity;
-      }
-      totalPerList[l.id!] = sum;
-    }
-
-    // Stores by # of items tracked (via item_store).
-    final storeItemCounts = <String, int>{};
-    final itemStoreByItem = <int, List<ItemStore>>{};
-    for (final it in items) {
-      if (it.id == null) continue;
-      final links = await ItemStoreDao.instance.forItem(it.id!);
-      if (links.isNotEmpty) {
-        itemStoreByItem[it.id!] = links;
-        for (final link in links) {
-          final store = stores.firstWhere(
-            (s) => s.id == link.storeId,
-            orElse: () => Store(name: '?', createdAt: DateTime.now()),
-          );
-          final name = store.name;
-          storeItemCounts[name] = (storeItemCounts[name] ?? 0) + 1;
-        }
-      }
-    }
-
-    final maxStoreCount =
-        storeItemCounts.values.fold<int>(0, (a, b) => a > b ? a : b);
-
-    // Most expensive items (by stored price).
-    final withPrice = items.where((i) => i.price != null).toList()
-      ..sort((a, b) => (b.price ?? 0).compareTo(a.price ?? 0));
-    final mostExpensive = withPrice.take(5).toList();
-
-    // Price comparison: items with prices at 2+ stores.
-    final priceComparison = <String, List<(String, double?)>>{};
-    for (final it in items) {
-      if (it.id == null) continue;
-      final links = itemStoreByItem[it.id!] ?? const <ItemStore>[];
-      if (links.length < 2) continue;
-      final name = it.nameEn.isEmpty ? (it.nameAr ?? '') : it.nameEn;
-      final entries = <(String, double?)>[];
-      for (final link in links) {
-        final store = stores.firstWhere(
-          (s) => s.id == link.storeId,
-          orElse: () => Store(name: '?', createdAt: DateTime.now()),
-        );
-        entries.add((store.name, link.price));
-      }
-      // Sort by price ascending (nulls last).
-      entries.sort((a, b) {
-        if (a.$2 == null) return 1;
-        if (b.$2 == null) return -1;
-        return a.$2!.compareTo(b.$2!);
-      });
-      priceComparison[name] = entries;
-    }
-
-    // Items total value (sum of all item prices — useful as a catalog KPI).
-    final itemsTotalValue = items.fold<double>(
-      0,
-      (s, i) => s + (i.price ?? 0),
-    );
-
-    return _Analytics(
-      totalLists: lists.length,
-      totalItems: items.length,
-      totalStores: stores.length,
-      totalItemStoreLinks: storeItemCounts.values.fold<int>(0, (a, b) => a + b),
-      itemsTotalValue: itemsTotalValue,
-      recentLists: lists.take(5).toList(),
-      itemsPerList: itemsPerList,
-      totalPerList: totalPerList,
-      storeItemCounts: storeItemCounts,
-      maxStoreCount: maxStoreCount == 0 ? 1 : maxStoreCount,
-      mostExpensive: mostExpensive,
-      priceComparison: priceComparison,
-    );
-  }
-}
-
-// ────────────────────────── Widgets ─────────────────────────────────────
-
-class _GreetingCard extends StatelessWidget {
-  final String username;
-  final bool isRtl;
-  final _Analytics data;
-
-  const _GreetingCard({
-    required this.username,
-    required this.isRtl,
-    required this.data,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              child: Icon(Icons.shopping_basket_rounded,
-                  color: Theme.of(context).colorScheme.primary,),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isRtl ? 'أهلاً $username' : 'Hello, $username',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  Text(
-                    isRtl
-                        ? 'إليك ملخص نشاطك في بازار'
-                        : "Here's your Bazaar activity at a glance",
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+      appBar: AppBar(
+        title: Text(_greeting(l, username)),
+        actions: [
+          IconButton(
+            tooltip: l.settingsTitle,
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => context.push(Routes.settings),
+          ),
+        ],
       ),
-    );
-  }
-}
-
-class _KpiGrid extends StatelessWidget {
-  final _Analytics data;
-  final bool isRtl;
-
-  const _KpiGrid({required this.data, required this.isRtl});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _KpiCard(
-            icon: Icons.checklist,
-            label: isRtl ? 'القوائم' : 'Lists',
-            value: '${data.totalLists}',
-            color: Colors.indigo,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _KpiCard(
-            icon: Icons.inventory_2,
-            label: isRtl ? 'المنتجات' : 'Items',
-            value: '${data.totalItems}',
-            color: Colors.deepOrange,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _KpiCard(
-            icon: Icons.storefront,
-            label: isRtl ? 'المتاجر' : 'Stores',
-            value: '${data.totalStores}',
-            color: Colors.teal,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _KpiCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color color;
-
-  const _KpiCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-            ),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final bool isRtl;
-  final VoidCallback? onSeeAll;
-
-  const _SectionHeader({
-    required this.icon,
-    required this.title,
-    required this.isRtl,
-    this.onSeeAll,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-        ),
-        if (onSeeAll != null)
-          TextButton(
-            onPressed: onSeeAll,
-            child: Text(isRtl ? 'عرض الكل' : 'See all'),
-          ),
-      ],
-    );
-  }
-}
-
-class _ListTileCard extends StatelessWidget {
-  final ShoppingList list;
-  final int itemCount;
-  final double total;
-  final bool isRtl;
-  final String langCode;
-
-  const _ListTileCard({
-    required this.list,
-    required this.itemCount,
-    required this.total,
-    required this.isRtl,
-    required this.langCode,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-          child: Icon(Icons.checklist,
-              color: Theme.of(context).colorScheme.primary,),
-        ),
-        title: Text(list.displayName(langCode)),
-        subtitle: Text(
-          isRtl
-              ? '$itemCount منتج • الإجمالي ${total.toStringAsFixed(2)}'
-              : '$itemCount items • Total ${total.toStringAsFixed(2)}',
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => ListDetailScreen(list: list),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _StoreBarRow extends StatelessWidget {
-  final String storeName;
-  final int count;
-  final double share;
-  final bool isRtl;
-
-  const _StoreBarRow({
-    required this.storeName,
-    required this.count,
-    required this.share,
-    required this.isRtl,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
+      body: ListView(
+        padding: const EdgeInsets.only(bottom: AppDimens.space6),
         children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              storeName,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: share.clamp(0.0, 1.0),
-                minHeight: 12,
-                backgroundColor:
-                    Theme.of(context).dividerColor.withValues(alpha: 0.3),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 28,
-            child: Text(
-              '$count',
-              textAlign: TextAlign.end,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+          // ── KPI grid ────────────────────────────────────────────────────
+          Padding(
+            padding: AppDimens.pagePadding,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _kpi(
+                    ref,
+                    context,
+                    icon: Icons.list_alt_rounded,
+                    provider: listsCountProvider,
+                    label: l.homeKpiLists,
+                    accent: theme.colorScheme.primary,
+                    onTap: () => context.go(Routes.lists),
                   ),
+                ),
+                const SizedBox(width: AppDimens.space3),
+                Expanded(
+                  child: _kpi(
+                    ref,
+                    context,
+                    icon: Icons.inventory_2_rounded,
+                    provider: itemsCountProvider,
+                    label: l.homeKpiItems,
+                    accent: theme.colorScheme.tertiary,
+                    onTap: () => context.go(Routes.items),
+                  ),
+                ),
+                const SizedBox(width: AppDimens.space3),
+                Expanded(
+                  child: _kpi(
+                    ref,
+                    context,
+                    icon: Icons.storefront_rounded,
+                    provider: storesCountProvider,
+                    label: l.homeKpiStores,
+                    accent: theme.colorScheme.secondary,
+                    onTap: () => context.go(Routes.stores),
+                  ),
+                ),
+              ],
             ),
           ),
+
+          // ── Recent lists ────────────────────────────────────────────────
+          SectionHeader(
+            l.homeRecentLists,
+            padding: const EdgeInsets.fromLTRB(
+              AppDimens.space4,
+              AppDimens.space5,
+              0,
+              8,
+            ),
+            trailing: TextButton(
+              onPressed: () => context.go(Routes.lists),
+              child: Text(l.commonViewAll),
+            ),
+          ),
+          _RecentLists(currency: currency),
+
+          // ── Stores by item count ────────────────────────────────────────
+          SectionHeader(l.homeStoresByItems),
+          const _StoresByItems(),
+
+          // ── Most expensive items ────────────────────────────────────────
+          SectionHeader(l.homeTopExpensive),
+          const _TopExpensive(),
         ],
       ),
     );
   }
-}
 
-class _ItemRankRow extends StatelessWidget {
-  final int rank;
-  final Item item;
-  final bool isRtl;
-  final String langCode;
-
-  const _ItemRankRow({
-    required this.rank,
-    required this.item,
-    required this.isRtl,
-    required this.langCode,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: CircleAvatar(
-        backgroundColor: rank == 1
-            ? Colors.amber
-            : rank == 2
-                ? Colors.grey
-                : rank == 3
-                    ? Colors.brown
-                    : Theme.of(context).dividerColor.withValues(alpha: 0.5),
-        child: Text(
-          '$rank',
-          style: TextStyle(
-            color: rank <= 3 ? Colors.white : null,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      title: Text(item.displayName(langCode)),
-      subtitle: item.barcode == null ? null : Text(item.barcode!),
-      trailing: CurrencyDisplay(
-        amount: item.price,
-        overrideCurrency: item.currency,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-      ),
+  Widget _kpi(
+    WidgetRef ref,
+    BuildContext context, {
+    required IconData icon,
+    required StreamProvider<int> provider,
+    required String label,
+    required Color accent,
+    VoidCallback? onTap,
+  }) {
+    final value = ref.watch(provider).value ?? 0;
+    return KpiCard(
+      icon: icon,
+      value: value,
+      label: label,
+      accent: accent,
+      onTap: onTap,
     );
+  }
+
+  String _greeting(AppLocalizations l, String? username) {
+    final hour = DateTime.now().hour;
+    final base = hour < 12
+        ? l.greetingMorning
+        : hour < 17
+        ? l.greetingAfternoon
+        : hour < 22
+        ? l.greetingEvening
+        : l.greetingNight;
+    return username == null || username.isEmpty ? base : '$base · $username';
   }
 }
 
-class _PriceCompareRow extends StatelessWidget {
-  final String itemName;
-  final List<(String, double?)> prices;
-  final bool isRtl;
-
-  const _PriceCompareRow({
-    required this.itemName,
-    required this.prices,
-    required this.isRtl,
-  });
+class _RecentLists extends ConsumerWidget {
+  final AppCurrency currency;
+  const _RecentLists({required this.currency});
 
   @override
-  Widget build(BuildContext context) {
-    final cheapest = prices
-        .where((p) => p.$2 != null)
-        .map((p) => p.$2!)
-        .fold<double?>(null, (a, b) => a == null ? b : (a < b ? a : b));
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final lists = ref.watch(recentListsProvider);
 
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(itemName,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: prices.map((p) {
-                final isCheapest = cheapest != null && p.$2 == cheapest;
-                return Chip(
-                  avatar: Icon(
-                    isCheapest ? Icons.price_check : Icons.store,
-                    size: 18,
-                    color: isCheapest ? Colors.green : null,
-                  ),
-                  label: Text(
-                    p.$2 == null
-                        ? '${p.$1}: —'
-                        : '${p.$1}: ${p.$2!.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      color: isCheapest ? Colors.green : null,
-                      fontWeight:
-                          isCheapest ? FontWeight.bold : FontWeight.normal,
+    return lists.when(
+      loading: () => const LinearProgressIndicator(minHeight: 2),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (data) {
+        if (data.isEmpty) {
+          return EmptyState(
+            icon: Icons.list_alt_rounded,
+            title: l.homeNoLists,
+            hint: l.homeNoListsHint,
+            actionLabel: l.homeCreateList,
+            onAction: () => context.push('/lists/new'),
+          );
+        }
+        return Padding(
+          padding: AppDimens.pagePadding,
+          child: Column(
+            children: [
+              for (final entry in data)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppDimens.space2),
+                  child: Card(
+                    child: ListTile(
+                      onTap: () => context.push(Routes.list(entry.list.id)),
+                      leading: Container(
+                        width: AppDimens.storeAvatar,
+                        height: AppDimens.storeAvatar,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.primaryContainer.withValues(
+                            alpha: 0.6,
+                          ),
+                          borderRadius: BorderRadius.circular(
+                            AppDimens.radiusM,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.shopping_cart_outlined,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      title: Text(
+                        entry.list.displayName(
+                          ref.read(localeProvider.notifier).effectiveCode,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(l.itemsCount(entry.itemCount)),
+                      trailing: PriceText(
+                        entry.totalSar / currency.toSarRate,
+                        currency: currency,
+                        style: theme.textTheme.titleSmall,
+                      ),
                     ),
                   ),
-                  backgroundColor:
-                      isCheapest ? Colors.green.withValues(alpha: 0.1) : null,
-                );
-              }).toList(),
-            ),
-          ],
-        ),
-      ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
-class _EmptyHint extends StatelessWidget {
-  final bool isRtl;
-  final String text;
-
-  const _EmptyHint({required this.isRtl, required this.text});
+class _StoresByItems extends ConsumerWidget {
+  const _StoresByItems();
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Center(
-        child: Text(
-          text,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final stores = ref.watch(storesByItemCountProvider);
+
+    return stores.when(
+      loading: () => const LinearProgressIndicator(minHeight: 2),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (data) {
+        if (data.isEmpty) {
+          return EmptyState(
+            icon: Icons.storefront_outlined,
+            title: l.homeNoStores,
+            hint: l.homeNoStoresHint,
+          );
+        }
+        final max = data
+            .map((e) => e.itemCount)
+            .fold(1, (a, b) => a > b ? a : b);
+        return Padding(
+          padding: AppDimens.pagePadding,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(AppDimens.space4),
+              child: Column(
+                children: [
+                  for (final entry in data)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: AppDimens.space3),
+                      child: InkWell(
+                        onTap: () => context.push(Routes.store(entry.store.id)),
+                        borderRadius: BorderRadius.circular(AppDimens.radiusS),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    entry.store.displayName(
+                                      ref
+                                          .read(localeProvider.notifier)
+                                          .effectiveCode,
+                                    ),
+                                    style: theme.textTheme.bodyMedium,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Text(
+                                  '${entry.itemCount}',
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                AppDimens.radiusS,
+                              ),
+                              child: LinearProgressIndicator(
+                                value: entry.itemCount / max,
+                                minHeight: 6,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TopExpensive extends ConsumerWidget {
+  const _TopExpensive();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final items = ref.watch(topExpensiveItemsProvider);
+    final currency = ref.watch(currencyProvider);
+
+    return items.when(
+      loading: () => const LinearProgressIndicator(minHeight: 2),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (data) {
+        if (data.isEmpty) {
+          return EmptyState(
+            icon: Icons.inventory_2_outlined,
+            title: l.homeNoItems,
+            hint: l.homeNoItemsHint,
+            actionLabel: l.homeScanFirst,
+            onAction: () => context.push(Routes.scan()),
+          );
+        }
+        final medals = [
+          Icons.looks_one_rounded,
+          Icons.looks_two_rounded,
+          Icons.looks_3_rounded,
+        ];
+        return Padding(
+          padding: AppDimens.pagePadding,
+          child: Card(
+            child: Column(
+              children: [
+                for (var i = 0; i < data.length; i++)
+                  ListTile(
+                    onTap: () => context.push(Routes.item(data[i].item.id)),
+                    leading: i < 3
+                        ? Icon(medals[i], color: theme.colorScheme.primary)
+                        : Text(
+                            '${i + 1}',
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                    title: Text(
+                      data[i].item.displayName(
+                        ref.read(localeProvider.notifier).effectiveCode,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: data[i].item.brand != null
+                        ? Text(
+                            data[i].item.brand!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : null,
+                    trailing: PriceText(
+                      data[i].displayPrice != null
+                          ? currencyFromCode(
+                              data[i].effectiveCurrency,
+                            ).convertTo(data[i].displayPrice!, currency)
+                          : null,
+                      currency: currency,
+                      style: theme.textTheme.titleSmall,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

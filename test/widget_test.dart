@@ -1,21 +1,64 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:bazaar/app.dart';
+import 'package:bazaar/core/providers/database_provider.dart';
+import 'package:bazaar/core/providers/settings_providers.dart';
+import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'database_test.dart' show createTestDatabase;
+
+/// Smoke test: the app boots into the onboarding screen with an empty
+/// local database and no user.
 void main() {
-  testWidgets('App loads without crashing', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const BazaarApp());
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
 
-    // Verify that the app loaded (should at least have something on screen).
-    expect(find.byType(MaterialApp), findsOneWidget);
+  testWidgets('app boots to the username screen', (tester) async {
+    final db = createTestDatabase();
+    addTearDown(db.close);
+    final sp = await SharedPreferences.getInstance();
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: ProviderContainer(overrides: [
+          sharedPreferencesProvider.overrideWithValue(sp),
+          databaseProvider.overrideWithValue(db),
+        ]),
+        child: const BazaarApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextFormField), findsOneWidget);
+    expect(find.byIcon(Icons.shopping_basket_rounded), findsOneWidget);
+  });
+
+  testWidgets('completing onboarding lands on Home', (tester) async {
+    final db = createTestDatabase();
+    addTearDown(db.close);
+    final sp = await SharedPreferences.getInstance();
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: ProviderContainer(overrides: [
+          sharedPreferencesProvider.overrideWithValue(sp),
+          databaseProvider.overrideWithValue(db),
+        ]),
+        child: const BazaarApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField), 'Wissam');
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+
+    // Home screen shows the greeting that includes the username.
+    final texts = tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).toList();
+    // ignore: avoid_print
+    print('TEXTS: ' + texts.join(' | '));
+    expect(find.textContaining('Wissam'), findsOneWidget);
   });
 }

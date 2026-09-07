@@ -53,6 +53,18 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Verify analysis
+        # SECURITY/QUALITY (Finding 13): previously this step used `|| true`
+        # which silently swallowed analyzer errors. We now fail the build on
+        # any analyzer error. Info-level lints are still non-fatal.
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run tests
+        # QUALITY (Finding 13): previously the workflow built APKs without
+        # ever running the test suite. Now we run all tests and fail the
+        # build on any failure.
+        run: flutter test
+
       - name: Determine Version
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
@@ -64,9 +76,6 @@ jobs:
           else
             echo "Using version from pubspec.yaml"
           fi
-
-      - name: Verify analysis
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
 
       - name: Decode release keystore (if secret present)
         id: keystore
