@@ -5,11 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/currencies.dart';
 import '../../../core/design/app_dimens.dart';
-import '../../../core/design/components/app_image.dart';
 import '../../../core/design/components/price_text.dart';
 import '../../../core/design/components/quantity_stepper.dart';
-import '../../../core/design/components/section_header.dart';
-import '../../../core/providers/data_providers.dart';
 import '../../../core/database/daos/list_item_dao.dart' show ListItemWithItem;
 import '../../../core/providers/database_provider.dart';
 import '../../../core/providers/settings_providers.dart';

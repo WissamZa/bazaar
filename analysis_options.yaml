@@ -1,5 +1,11 @@
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    # Drift/codegen output — not hand-edited.
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
 linter:
   rules:
     avoid_print: true

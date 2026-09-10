@@ -6,7 +6,6 @@ import '../../core/constants/currencies.dart';
 import '../../core/design/app_dimens.dart';
 import '../../core/design/components/empty_state.dart';
 import '../../core/design/components/price_text.dart';
-import '../../core/design/components/section_header.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/providers/settings_providers.dart';

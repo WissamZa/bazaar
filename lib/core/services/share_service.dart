@@ -77,7 +77,7 @@ class ShareService {
       type: FileType.custom,
       allowedExtensions: ['json'],
     );
-    if (result == null || result.single.path == null) {
+    if (result.isEmpty || result.single.path == null) {
       return const ImportSummary.cancelled();
     }
     return importFromPath(result.single.path!);

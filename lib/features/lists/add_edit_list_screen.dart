@@ -49,7 +49,6 @@ class _AddEditListScreenState extends ConsumerState<AddEditListScreen> {
   }
 
   Future<void> _save() async {
-    final l = AppLocalizations.of(context)!;
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     try {

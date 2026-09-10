@@ -5,9 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/design/app_dimens.dart';
 import '../../core/design/app_typography.dart';
-import '../../core/providers/database_provider.dart';
 import '../../core/providers/settings_providers.dart';
-import '../../core/services/scraping_config.dart';
 import '../../core/services/scraper_service.dart';
 import '../../l10n/generated/app_localizations.dart';
 

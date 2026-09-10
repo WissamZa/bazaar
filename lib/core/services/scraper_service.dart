@@ -337,7 +337,7 @@ class ScraperService {
         if (pageRes.statusCode == 200) {
           html = pageRes.body;
           ex = ProductSchemaParser.fromHtml(html);
-          _log('  → Tier 1 schema: name=${ex?.name}, price=${ex?.price}');
+          _log('  → Tier 1 schema: name=${ex.name}, price=${ex.price}');
         } else {
           _log('  → Tier 1 HTTP ${pageRes.statusCode}');
         }

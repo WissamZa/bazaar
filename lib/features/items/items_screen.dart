@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/currencies.dart';
 import '../../core/database/daos/item_dao.dart';
-import '../../core/database/app_database.dart' show ItemRow;
 import '../../core/design/app_dimens.dart';
 import '../../core/design/components/app_image.dart';
 import '../../core/design/components/empty_state.dart';
@@ -38,7 +37,6 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
-    final theme = Theme.of(context);
     final currency = ref.watch(currencyProvider);
     final items = ref.watch(itemsStreamProvider);
 
@@ -69,7 +67,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
             ),
             child: TextField(
               controller: _searchController,
-              onChanged: (v) => ref.read(itemSearchProvider.notifier).state = v,
+              onChanged: (v) => ref.read(itemSearchProvider.notifier).set(v),
               decoration: InputDecoration(
                 hintText: l.searchItems,
                 prefixIcon: const Icon(Icons.search),
@@ -81,7 +79,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
                           icon: const Icon(Icons.close, size: 18),
                           onPressed: () {
                             _searchController.clear();
-                            ref.read(itemSearchProvider.notifier).state = '';
+                            ref.read(itemSearchProvider.notifier).set('');
                           },
                         ),
                 ),

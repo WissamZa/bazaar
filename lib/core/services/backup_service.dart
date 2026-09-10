@@ -7,7 +7,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:drift/drift.dart'
-    show DoNothing, Insertable, RawValuesInsertable, Table, TableInfo, Variable;
+    show DoNothing, Insertable, RawValuesInsertable, Variable;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -258,7 +258,7 @@ class BackupService {
       type: FileType.custom,
       allowedExtensions: ['zip'],
     );
-    if (result == null || result.single.path == null) return null;
+    if (result.isEmpty || result.single.path == null) return null;
     final file = File(result.single.path!);
 
     // Quick sniff: read meta.json to detect encryption before prompting.
@@ -481,31 +481,6 @@ class BackupService {
     return RawValuesInsertable({
       for (final entry in map.entries)
         entry.key: Variable(entry.value),
-    });
-  }
-
-  /// Turn a raw JSON row map into a drift insert companion, dropping the
-  /// `id` column (free re-numbering) and any columns not in [keepDates].
-  /// Column names come from the legacy schema, which the row maps use.
-  Insertable<D> _rowMapToCompanion<Tbl extends Table, D>(
-    TableInfo<Tbl, D> table,
-    Map<String, Object?> raw,
-    String keepDates,
-  ) {
-    final map = <String, Object?>{};
-    final keep = keepDates.split(',').where((e) => e.isNotEmpty).toSet();
-    for (final entry in raw.entries) {
-      if (entry.key == 'id') continue;
-      final isDate = keep.contains(entry.key);
-      if (!isDate && entry.value == null) continue;
-      map[entry.key] = entry.value;
-    }
-    // Ensure NOT NULL date columns always get a value.
-    for (final col in keep) {
-      map[col] ??= DateTime.now().toIso8601String();
-    }
-    return RawValuesInsertable({
-      for (final entry in map.entries) entry.key: Variable(entry.value),
     });
   }
 

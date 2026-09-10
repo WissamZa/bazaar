@@ -7,9 +7,7 @@ import '../../core/design/app_dimens.dart';
 import '../../core/design/components/app_image.dart';
 import '../../core/design/components/empty_state.dart';
 import '../../core/design/components/price_text.dart';
-import '../../core/design/components/section_header.dart';
 import '../../core/design/components/status_chip.dart';
-import '../../core/providers/data_providers.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/providers/settings_providers.dart';
 import '../../core/services/barcode_service.dart';
@@ -110,14 +108,12 @@ class _ScanResultScreenState extends ConsumerState<ScanResultScreen> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
-    final currency = ref.watch(currencyProvider);
     final locale = ref.watch(
       localeProvider.select((s) => s?.languageCode ?? 'en'),
     );
 
     final local = _result?.localItem;
     final online = _result?.onlineProduct;
-    final found = local != null || online != null;
 
     return Scaffold(
       appBar: AppBar(title: Text(l.scanBarcode)),

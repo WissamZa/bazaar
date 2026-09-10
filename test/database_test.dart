@@ -142,7 +142,7 @@ void main() {
           (await db.listItemDao.watchForList(listId).first)
               .singleWhere((r) => r.item.id == riceId)
               .listItem
-              .id!;
+              .id;
       await db.listItemDao.setQuantity(riceRowId, 2);
       final rows = await db.shoppingListDao.watchAllWithStats().first;
       expect(rows.single.itemCount, 2);
@@ -153,7 +153,7 @@ void main() {
       final liRows = await db.listItemDao.watchForList(listId).first;
       final colaRow =
           liRows.singleWhere((r) => r.item.id == colaId);
-      await db.listItemDao.setChecked(colaRow.listItem.id!, true);
+      await db.listItemDao.setChecked(colaRow.listItem.id, true);
       final after = await db.shoppingListDao.watchAllWithStats().first;
       expect(after.single.checkedCount, 1);
       expect(after.single.checkedTotalSar, closeTo(5, 0.001));
@@ -179,7 +179,7 @@ void main() {
 
       await db.listItemDao.addItemToList(listId: listId, itemId: itemId);
       final rowId =
-          (await db.listItemDao.watchForList(listId).first).single.listItem.id!;
+          (await db.listItemDao.watchForList(listId).first).single.listItem.id;
       await db.listItemDao.setPreferredStore(rowId, near);
 
       // Row-level effective price = 6 (preferred), list total = 6.

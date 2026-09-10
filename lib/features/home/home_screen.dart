@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_dimens.dart';
-import '../../core/design/components/app_image.dart';
 import '../../core/design/components/kpi_card.dart';
 import '../../core/design/components/price_text.dart';
 import '../../core/design/components/section_header.dart';

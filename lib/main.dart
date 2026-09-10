@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
 import 'core/providers/database_provider.dart';
 import 'core/providers/settings_providers.dart';
-import 'core/services/share_service.dart';
 
 /// Bazaar — local-first shopping lists with barcode price tracking.
 ///

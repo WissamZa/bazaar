@@ -1,10 +1,6 @@
 import 'package:drift/drift.dart' show Value;
 
-import '../constants/currencies.dart';
 import '../database/app_database.dart';
-import '../database/daos/item_dao.dart';
-import '../database/daos/item_store_dao.dart';
-import '../database/daos/store_dao.dart';
 import 'scraper_service.dart';
 
 /// Orchestrates the barcode flow:
