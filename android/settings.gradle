@@ -15,6 +15,18 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+
+    // Kotlin's serialization plugin is a compiler plugin and MUST match the
+    // Kotlin compiler version. background_downloader (via flutter_gemma) pins
+    // it at 2.1.0, which is incompatible with our Kotlin 2.2.20 compiler and
+    // breaks serializer generation. Force every kotlin plugin to one version.
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id.startsWith('org.jetbrains.kotlin')) {
+                useVersion('2.2.20')
+            }
+        }
+    }
 }
 
 plugins {
